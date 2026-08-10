@@ -1,0 +1,18 @@
+{
+  "name": "gaia",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GAIA Protocol Two modular monolith scaffold.",
+  "scripts": {
+    "check": "py -3.13 scripts/bootstrap/validate_constitution.py",
+    "lint": "py -3.13 scripts/bootstrap/validate_constitution.py",
+    "test": "py -3.13 -m unittest discover -s tests -p test_*.py",
+    "eval": "py -3.13 scripts/eval/run_eval_smoke.py",
+    "seed": "py -3.13 scripts/bootstrap/seed_placeholder.py",
+    "env": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap/check_environment.ps1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
+

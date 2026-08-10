@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gaia}
+      POSTGRES_USER: ${POSTGRES_USER:-gaia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gaia_local_dev_password}
+    ports:
+      - "${GAIA_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - gaia_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gaia} -d ${POSTGRES_DB:-gaia}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2026-06-02T01-11-56Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-gaia_local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-gaia_local_dev_password}
+    ports:
+      - "${GAIA_MINIO_API_PORT:-9000}:9000"
+      - "${GAIA_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - gaia_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  gaia_postgres_data:
+  gaia_minio_data:
+
