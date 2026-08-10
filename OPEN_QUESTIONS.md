@@ -1,6 +1,8 @@
 # OPEN QUESTIONS
 
-Only unresolved, architecture-impacting questions are listed here. Protocol Two defaults are treated as decisions and are not repeated as questions.
+Protocol Two defaults are treated as decisions and are not repeated as questions.
+
+## Active Questions
 
 ## Q1. First Alpha Domain and Deployment Surface
 
@@ -14,51 +16,40 @@ Should the first alpha be private, invite-only, or public?
 
 Why this matters: onboarding flow, rate limits, abuse controls, default workspace creation, telemetry, and support expectations change materially.
 
-## Q3. Authentication Provider
-
-Which authentication provider, if any, is already used by Cillian Industries and should GAIA integrate with first?
-
-Why this matters: GAIA authorization is internal, but identity provider choice affects user IDs, OAuth/OIDC setup, local development, institution SSO, and migration paths.
-
-## Q4. Target Hardware for Local Multimodal Inference
-
-Beyond this development machine, what exact minimum hardware should GAIA Local support for image reasoning?
-
-Why this matters: model adapter defaults, quantization strategy, local-provider test fixtures, UX expectations, and sovereign deployment guidance depend on target hardware.
-
-## Q5. Existing Cillian/GreensWrld Schemas
-
-Are there existing plant, observation, action, outcome, user, organization, or GreensWrld schemas that GAIA must preserve or map to?
-
-Why this matters: core domain models and migration boundaries should avoid rework if existing production data shapes already exist.
-
-## Q6. Institutional Telemetry Policy
-
-What telemetry may Cillian collect from institution and sovereign deployments by default?
-
-Why this matters: observability, audit exports, support diagnostics, privacy defaults, and network egress policy must be designed before remote logging or analytics exists.
-
-## Q7. Personal Data Retention and Deletion Defaults
-
-What deletion and retention expectation should personal users receive at launch?
-
-Why this matters: schema design, attachment lifecycle, provenance exports, backups, account deletion, and outcome graph permissions all depend on retention semantics.
-
-## Q8. Minors and Student Users
-
-Are minors or students expected to use university, school, extension, or public deployments?
-
-Why this matters: onboarding, consent, privacy, data retention, content safety, research exports, and institutional policy controls may need stricter defaults.
-
-## Q9. Geographic Privacy Default
-
-What should the initial geographic privacy default be: exact, 100m, 1km, county, or another policy?
-
-Why this matters: location schema supports precision, but UI defaults, shared outputs, evidence bundles, and map behavior need a default before user-facing release.
-
 ## Q10. Paid Provider Approval Authority
 
 Who may approve enabling any paid provider in the future?
 
 Why this matters: the Cost Firewall can technically block paid usage by default, but manual override governance needs a named role or approval policy before any paid integration exists.
 
+## Resolved for Commit 2
+
+## Q3. Authentication Provider
+
+Resolved by D037 and D038: no commercial provider is selected in Phase 1; GAIA uses a provider-neutral authentication boundary plus safe development identity.
+
+## Q4. Target Hardware for Local Multimodal Inference
+
+Resolved by D047 and D048 for current development: use existing lightweight Ollama/LLaVA where practical, mock heavily, and do not make CI depend on a GPU model. Nemotron remains a future benchmark candidate.
+
+Future minimum supported hardware remains a product/deployment question, but it does not block Commit 2.
+
+## Q5. Existing Cillian/GreensWrld Schemas
+
+Resolved by D035 and D036: GAIA's canonical core schema is standalone and must not depend on GreensWrld. Future integration uses an adapter/mapping layer.
+
+## Q6. Institutional Telemetry Policy
+
+Resolved by D042, D043, and D044: collect minimum necessary operational telemetry for Public; exclude private content/coordinates/media/datasets from analytics by default; institution/sovereign telemetry must support disablement, local-only operation, and administrator configuration.
+
+## Q7. Personal Data Retention and Deletion Defaults
+
+Resolved by D039, D040, and D041: active data is retained while account/workspace exists; user-requested deletion immediately makes data inaccessible and hard-deletes eligible personal content within 30 days; schema records retention metadata.
+
+## Q8. Minors and Student Users
+
+Resolved by D052: do not design a special student/minor workflow yet; GAIA Public should not intentionally target children in the MVP.
+
+## Q9. Geographic Privacy Default
+
+Resolved by D045 and D046: ordinary consumer/public accounts default to `privacy_precision = "approximate"` and exact coordinates require authorized use.

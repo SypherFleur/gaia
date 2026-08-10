@@ -138,3 +138,78 @@ Do not claim compliance certifications, peer review, legal guarantee, or pestici
 
 Implementation follows Protocol Two: constitution and scaffolding first, then domain/tenancy, provider registry/Cost Firewall/provenance, Atlas, Terra, Model Gateway, GuidancePlan API, UI, plant workspace, vision, then evaluations before expansion.
 
+## D035. GAIA Canonical Domain Is Standalone
+
+GAIA is a standalone canonical intelligence platform. Its core schema will not depend on GreensWrld or any existing Cillian application schema. Future GreensWrld integration must use an adapter/mapping layer: `GreensWrld -> GAIA Integration Adapter -> GAIA Canonical Domain`.
+
+## D036. Future GreensWrld Mapping
+
+If GreensWrld schemas become available later, inspect them and create migrations/import mappings without changing GAIA's core architecture unless there is a compelling documented reason.
+
+## D037. Provider-Neutral Authentication Boundary
+
+GAIA will not bind to a commercial authentication provider in Phase 1. It will define a provider-neutral authentication boundary that can later support institutional SSO/OIDC, Google identity, or another provider without changing domain models.
+
+## D038. Development Identity Provider
+
+Local development may use a safe development identity provider with deterministic local users and organizations for tests. Development authentication is not production authentication. Authorization and tenancy remain GAIA-owned.
+
+## D039. Retention Default for Active Data
+
+Active user and workspace data is retained while the account/workspace exists unless the user or organization deletes it.
+
+## D040. User-Requested Deletion Default
+
+User-requested deletion immediately marks data inaccessible to normal application use. Eligible personal content should be hard-deleted within 30 days, associated media/object-storage content removed, and derived records deleted or anonymized where legally and technically appropriate.
+
+## D041. Retention Metadata in Schema
+
+Retention policy metadata must exist in the schema so personal, research, institution, and audit/security retention policies can evolve without redesigning core objects.
+
+## D042. Minimal Operational Telemetry
+
+GAIA Public may initially collect only minimum necessary operational telemetry: request ID, timestamps, latency, tool/provider used, model identifier/version, error classification, quota/cost information, cache hit/miss, and coarse feature usage.
+
+## D043. Telemetry Exclusions
+
+Raw conversations, private documents, exact farm coordinates, images, and institutional datasets must not enter analytics/telemetry by default.
+
+## D044. Institution and Sovereign Telemetry Control
+
+GAIA Institution and GAIA Sovereign must eventually support full telemetry disablement, local-only operation, and administrator configuration. Private institutional data may not be silently transmitted to Cillian Industries.
+
+## D045. Location Privacy Default
+
+Ordinary consumer/public accounts default to `privacy_precision = "approximate"`. Architecture must also support exact, 100m, 1km, county/district, and custom institutional policy.
+
+## D046. Exact Coordinate Handling
+
+GAIA stores and uses exact coordinates only when a feature requires them and the user has authorized their use. Exact farm/private-property coordinates must not be exposed in shared/public responses by default. Precise coordinates may be used internally for agronomic calculations while external presentation is privacy-reduced.
+
+## D047. Local Model Development Strategy
+
+Do not make Nemotron 3 Nano Omni mandatory for local development. Use the existing lightweight Ollama text model for ordinary development/testing and the existing LLaVA model for initial image/vision plumbing where practical. Automated tests should rely heavily on mocks/fixtures and must not require a running GPU model.
+
+## D048. Nemotron Benchmark Deferred
+
+Nemotron 3 Nano Omni remains a primary future multimodal benchmark candidate. Create a future benchmark task rather than forcing a 30B multimodal model into the detected 6 GB VRAM development machine.
+
+## D049. Docker Not Blocking Phase 1
+
+Docker Desktop being stopped is not an architectural blocker for Phase 1 work that does not require live containers. Before relying on live containers, verify Docker Desktop can be started and `docker compose up` works. Do not modify operating-system services destructively.
+
+## D050. Locked Initial Geography
+
+GAIA is U.S.-first and global-ready. U.S. federal plus Texas are the first jurisdiction implementation, Florida is next, and Singapore is the first planned non-U.S. jurisdiction. The core schema must not assume U.S.-only geography.
+
+## D051. Calendar Domain Now, OAuth Later
+
+Google Calendar remains required but does not block Phase 1. Implement `Action`, `SeasonPlan`, and `CalendarBinding` domain objects now. Actual OAuth/calendar integration occurs in the Season/Calendar phase.
+
+## D052. No Special Minor Workflow in MVP
+
+Do not design a special student/minor workflow yet. Institution architecture must support organization policies and roles, but GAIA Public should not intentionally target children in the MVP.
+
+## D053. English First, Locale-Aware Architecture
+
+English is first. Architecture remains locale-aware and Unicode-safe. Do not spend MVP time implementing multilingual generation.

@@ -17,7 +17,9 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 0: repository constitution, comprehension, decisions, local environment validation, and reversible scaffolding.
+Phase 1: identity, tenancy, and canonical core domain foundation.
+
+The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
 ## Local Commands
 
@@ -34,3 +36,8 @@ Unix-like convenience commands are mirrored in `Makefile`.
 
 Docker is installed on the inspected machine, but Docker Desktop was not running during initial validation.
 
+## Phase 1 Domain Boundary
+
+GAIA's core domain is standalone. GreensWrld or other Cillian application schemas integrate later through adapters and mappings.
+
+Authentication is provider-neutral. Local development may use deterministic development identities for tests, but development authentication is not production authentication. Authorization and tenancy remain GAIA-owned.
