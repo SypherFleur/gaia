@@ -28,6 +28,9 @@ StudyType = Literal[
     "unknown",
 ]
 MovementStatus = Literal["allowed", "conditional", "restricted", "unresolved"]
+MovementDecisionStatus = Literal["ALLOWED", "CONDITIONAL", "RESTRICTED", "UNRESOLVED"]
+RegulatoryFreshness = Literal["CURRENT", "STALE", "EXPIRED", "UNAVAILABLE", "CONFLICT"]
+PlantPart = Literal["seed", "fruit", "live plant", "cutting", "scion", "root", "soil", "growing medium", "unknown"]
 MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
 ConversationState = Literal["active", "archived"]
@@ -456,6 +459,49 @@ class RegulationRule(EntityMetadata):
     effective_to: str | None = None
     source_record_id: str | None = None
     last_verified_at: str | None = None
+
+
+@dataclass(slots=True)
+class MovementRequest(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    origin_location_id: str | None = None
+    destination_location_id: str | None = None
+    planned_date: str | None = None
+    species: str | None = None
+    cultivar: str | None = None
+    plant_part: PlantPart | str = "unknown"
+    live_plant: bool = False
+    soil_attached: bool = False
+    growing_media: str | None = None
+    quantity: int | None = None
+    purpose: str | None = None
+    commercial_or_personal: str = "personal"
+    source_country: str | None = None
+    destination_country: str | None = None
+    metadata: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class MovementDecision(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    movement_request_id: str = ""
+    status: MovementDecisionStatus | str = "UNRESOLVED"
+    applicable_jurisdictions: list[JsonDict] = field(default_factory=list)
+    applicable_rules: list[JsonDict] = field(default_factory=list)
+    conditions: list[JsonDict] = field(default_factory=list)
+    permit_requirements: list[JsonDict] = field(default_factory=list)
+    treatment_requirements: list[JsonDict] = field(default_factory=list)
+    inspection_requirements: list[JsonDict] = field(default_factory=list)
+    reporting_requirements: list[JsonDict] = field(default_factory=list)
+    unresolved_questions: list[str] = field(default_factory=list)
+    conflicts: list[JsonDict] = field(default_factory=list)
+    checked_at: str = field(default_factory=now_iso)
+    freshness: RegulatoryFreshness | str = "UNAVAILABLE"
+    source_record_ids: list[str] = field(default_factory=list)
+    model_run_ids: list[str] = field(default_factory=list)
+    authority_statement: str = ""
 
 
 @dataclass(slots=True)

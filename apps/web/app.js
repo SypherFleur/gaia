@@ -21,6 +21,10 @@ const visionProvider = document.querySelector("#vision-provider");
 const visionOutput = document.querySelector("#vision-output");
 const evidenceDemo = document.querySelector("#evidence-demo");
 const evidenceOutput = document.querySelector("#evidence-output");
+const movementForm = document.querySelector("#movement-form");
+const sentinelStatus = document.querySelector("#sentinel-status");
+const sentinelFreshness = document.querySelector("#sentinel-freshness");
+const sentinelOutput = document.querySelector("#sentinel-output");
 
 const plants = [
   {
@@ -76,6 +80,15 @@ const plants = [
           category: "Experimental",
         },
       ],
+    },
+    sentinel: {
+      status: "CONDITIONAL",
+      freshness: "CURRENT",
+      authorities: ["USDA APHIS", "Texas Department of Agriculture"],
+      requirements: ["APHIS certificate or compliance agreement", "TDA compliance agreement or special permit may be required"],
+      unresolved: [],
+      source_count: 3,
+      note: "GAIA is not the legal authority.",
     },
   },
 ];
@@ -200,9 +213,51 @@ evidenceDemo.addEventListener("click", () => {
   providers.textContent = JSON.stringify({ scholar: { "europe-pmc": "AVAILABLE" } }, null, 2);
 });
 
+movementForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const data = new FormData(movementForm);
+  const plantPart = data.get("plantPart");
+  const species = String(data.get("species") || "");
+  const soilAttached = data.get("soilAttached") === "on";
+  const result = movementDemo(species, plantPart, soilAttached);
+  sentinelStatus.textContent = result.status;
+  sentinelFreshness.textContent = `freshness: ${result.freshness}`;
+  sentinelOutput.textContent = JSON.stringify(result, null, 2);
+  route.textContent = "sentinel";
+  modelRuns.textContent = "0";
+  sources.textContent = String(result.source_count);
+  providers.textContent = JSON.stringify({ sentinel: { aphis: "AVAILABLE", "texas-agriculture": "AVAILABLE" } }, null, 2);
+});
+
 function selectDemoResponse(text) {
   const lower = text.toLowerCase();
   return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
+}
+
+function movementDemo(species, plantPart, soilAttached) {
+  const base = selectedPlant.sentinel || {
+    status: "UNRESOLVED",
+    freshness: "UNAVAILABLE",
+    authorities: [],
+    requirements: [],
+    unresolved: ["No Sentinel context loaded for selected plant."],
+    source_count: 0,
+  };
+  if (!species.trim()) {
+    return { ...base, status: "UNRESOLVED", unresolved: ["species_required_for_regulatory_matching"] };
+  }
+  if (plantPart === "fruit") {
+    return {
+      ...base,
+      status: "ALLOWED",
+      requirements: [],
+      note: "Fixture result only; fruit commodity rules require separate current checks in real workflows.",
+    };
+  }
+  return {
+    ...base,
+    request: { species, plant_part: plantPart, soil_attached: soilAttached },
+  };
 }
 
 function appendMessage(role, text) {
@@ -252,6 +307,9 @@ function selectPlant(plant) {
   visionProvider.textContent = plant.vision?.provider || "none";
   visionOutput.textContent = JSON.stringify(plant.vision || {}, null, 2);
   evidenceOutput.textContent = JSON.stringify(plant.evidence || {}, null, 2);
+  sentinelStatus.textContent = plant.sentinel?.status || "UNRESOLVED";
+  sentinelFreshness.textContent = `freshness: ${plant.sentinel?.freshness || "idle"}`;
+  sentinelOutput.textContent = JSON.stringify(plant.sentinel || {}, null, 2);
 }
 
 renderPlants();

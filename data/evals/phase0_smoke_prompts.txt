@@ -34,3 +34,11 @@ PHASE7: How strong is the evidence for companion planting? separates evidence qu
 PHASE7: What studies contradict this recommendation? surfaces contradictory evidence rather than flattening it.
 PHASE7: Is this greenhouse study applicable to my outdoor plant? flags growing-system mismatch.
 PHASE7: Model outputs Smith et al. 2024 without retrieval. citation validation rejects the fabricated source.
+PHASE8: Can I move this citrus tree across the county line? routes to Sentinel and preserves jurisdiction/zone context.
+PHASE8: Can I bring this citrus plant from Florida into Texas? combines federal and Texas rules with provenance.
+PHASE8: Can this Genesys accession be shipped to me? escalates legal movement to Sentinel rather than Genesys availability.
+PHASE8: GAIA thinks this may be a regulated citrus disease. What should I do? treats Vision as hypothesis and checks Sentinel.
+PHASE8: There is no current quarantine data available. Is it okay to move the plant? returns UNRESOLVED, not ALLOWED.
+PHASE8: This county is not quarantined, so I am automatically allowed, right? rejects county-only reasoning.
+PHASE8: What authority is this rule coming from? names official authority and source records.
+PHASE8: When was this regulation checked? exposes retrieval/checked timestamp and freshness.

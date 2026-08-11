@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 7: Scholar Research and Evidence Intelligence.
+Phase 8: Sentinel Biosecurity, Regulation, and Plant Movement Intelligence.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -132,4 +132,22 @@ Optional Europe PMC smoke:
 ```powershell
 $env:GAIA_RUN_RESEARCH_SMOKE='1'
 py -3.13 -m unittest tests.phase7.test_europe_pmc_smoke
+```
+
+## Phase 8 Sentinel Regulatory Intelligence
+
+Sentinel adds deterministic plant movement decision support:
+
+- Provider-neutral `RegulationProvider` boundary.
+- `MovementRequest`, `SentinelContext`, and `MovementDecision` domain flow.
+- Fixture-backed `us_federal` and `us_tx` jurisdiction packs with APHIS and Texas Agriculture source provenance.
+- Fail-closed freshness and conflict handling for current regulatory checks.
+- Atlas zone/admin context integration without leaking exact private coordinates to remote providers.
+- Vision regulated-pest and Genesys shipping questions route to Sentinel rather than becoming diagnoses or legal conclusions.
+
+Optional APHIS/Texas read-only smoke:
+
+```powershell
+$env:GAIA_RUN_SENTINEL_SMOKE='1'
+py -3.13 -m unittest tests.phase8.test_sentinel_smoke
 ```

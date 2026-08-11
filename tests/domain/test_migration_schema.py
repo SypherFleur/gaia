@@ -49,6 +49,9 @@ class MigrationSchemaTest(unittest.TestCase):
             "evidence_syntheses",
             "research_collections",
             "research_annotations",
+            "movement_requests",
+            "movement_decisions",
+            "sentinel_zone_features",
         }
 
         rows = connection.execute(

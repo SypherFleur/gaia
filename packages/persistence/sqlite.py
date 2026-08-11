@@ -20,6 +20,8 @@ from packages.domain import (
     Membership,
     ModelRun,
     MovementCheck,
+    MovementDecision,
+    MovementRequest,
     Observation,
     Organization,
     Outcome,
@@ -616,6 +618,44 @@ class GaiaRepository:
         self._insert_from_dict("movement_checks", values)
         return movement_check
 
+    def create_movement_request(self, movement_request: MovementRequest) -> MovementRequest:
+        self._require_workspace(movement_request.organization_id, movement_request.workspace_id)
+        if movement_request.origin_location_id is not None:
+            self._require_location(movement_request.organization_id, movement_request.origin_location_id)
+        if movement_request.destination_location_id is not None:
+            self._require_location(movement_request.organization_id, movement_request.destination_location_id)
+        values = asdict(movement_request)
+        values["live_plant"] = 1 if movement_request.live_plant else 0
+        values["soil_attached"] = 1 if movement_request.soil_attached else 0
+        for key in ["metadata", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("movement_requests", values)
+        return movement_request
+
+    def create_movement_decision(self, movement_decision: MovementDecision) -> MovementDecision:
+        self._require_workspace(movement_decision.organization_id, movement_decision.workspace_id)
+        self._require_movement_request(movement_decision.organization_id, movement_decision.movement_request_id)
+        for model_run_id in movement_decision.model_run_ids:
+            self._require_model_run(movement_decision.organization_id, model_run_id)
+        values = asdict(movement_decision)
+        for key in [
+            "applicable_jurisdictions",
+            "applicable_rules",
+            "conditions",
+            "permit_requirements",
+            "treatment_requirements",
+            "inspection_requirements",
+            "reporting_requirements",
+            "unresolved_questions",
+            "conflicts",
+            "source_record_ids",
+            "model_run_ids",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("movement_decisions", values)
+        return movement_decision
+
     def create_season_plan(self, season_plan: SeasonPlan) -> SeasonPlan:
         self._require_workspace(season_plan.organization_id, season_plan.workspace_id)
         if season_plan.location_id is not None:
@@ -969,6 +1009,65 @@ class GaiaRepository:
             ],
         )
 
+    def get_movement_request(self, organization_id: str, movement_request_id: str) -> JsonDict | None:
+        record = self._get_tenant_row("movement_requests", organization_id, movement_request_id, ["metadata", "retention_policy"])
+        if record is not None:
+            record["live_plant"] = bool(record["live_plant"])
+            record["soil_attached"] = bool(record["soil_attached"])
+        return record
+
+    def get_movement_decision(self, organization_id: str, movement_decision_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "movement_decisions",
+            organization_id,
+            movement_decision_id,
+            [
+                "applicable_jurisdictions",
+                "applicable_rules",
+                "conditions",
+                "permit_requirements",
+                "treatment_requirements",
+                "inspection_requirements",
+                "reporting_requirements",
+                "unresolved_questions",
+                "conflicts",
+                "source_record_ids",
+                "model_run_ids",
+                "retention_policy",
+            ],
+        )
+
+    def list_movement_decisions_for_request(self, organization_id: str, movement_request_id: str) -> list[JsonDict]:
+        self._require_movement_request(organization_id, movement_request_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM movement_decisions
+            WHERE organization_id = ? AND movement_request_id = ? AND deleted_at IS NULL
+            ORDER BY checked_at DESC, id
+            """,
+            (organization_id, movement_request_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(
+                dict(row),
+                [
+                    "applicable_jurisdictions",
+                    "applicable_rules",
+                    "conditions",
+                    "permit_requirements",
+                    "treatment_requirements",
+                    "inspection_requirements",
+                    "reporting_requirements",
+                    "unresolved_questions",
+                    "conflicts",
+                    "source_record_ids",
+                    "model_run_ids",
+                    "retention_policy",
+                ],
+            )
+            for row in rows
+        ]
+
     def get_research_collection(self, organization_id: str, collection_id: str) -> JsonDict | None:
         return self._get_tenant_row("research_collections", organization_id, collection_id, ["work_ids", "retention_policy"])
 
@@ -1103,6 +1202,8 @@ class GaiaRepository:
             "actions",
             "outcomes",
             "movement_checks",
+            "movement_requests",
+            "movement_decisions",
             "season_plans",
             "calendar_bindings",
             "conversations",
@@ -1236,3 +1337,7 @@ class GaiaRepository:
     def _require_research_collection(self, organization_id: str, collection_id: str) -> None:
         if self.get_research_collection(organization_id, collection_id) is None:
             raise TenantAccessError("ResearchCollection is missing or inaccessible")
+
+    def _require_movement_request(self, organization_id: str, movement_request_id: str) -> None:
+        if self.get_movement_request(organization_id, movement_request_id) is None:
+            raise TenantAccessError("MovementRequest is missing or inaccessible")

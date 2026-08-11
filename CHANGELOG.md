@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added Phase 8 Sentinel regulatory provider boundary, APHIS/Texas fixture adapters, read-only regulatory smoke adapter, Tool Gateway wrappers, SentinelService, deterministic rule matching, movement decision persistence, and minimal Sentinel UI diagnostics.
+- Added migration `0008_sentinel_regulatory_intelligence.sql` for strengthened regulatory rule fields, movement requests, movement decisions, and Sentinel zone features.
+- Added Phase 8 tests covering citrus movement, federal/state rule aggregation, unknown data fail-closed behavior, conflicts, freshness, tenant/privacy boundaries, Cost Firewall behavior, caching, Vision/Genesys escalation, plant-part distinctions, exceptions, and optional APHIS/Texas live smoke.
 - Added Phase 7 Scholar research provider boundary, Europe PMC live-capable adapter, fixture research provider, research Tool Gateway wrappers, ScholarService, citation validation, deterministic query planning, evidence synthesis prompt harness, and research API helpers.
 - Added migration `0007_scholar_research_evidence.sql` for research works, authors, claims, evidence syntheses, collections, and private annotations.
 - Added Phase 7 tests covering normalized retrieval, deduplication, missing DOI identity, fetch provenance, provider outages, contradictions, study types, retractions, applicability mismatch, citation validation, tenancy, retrieved-content injection boundaries, cost/cache behavior, no-result honesty, Botanist/Vision integration, and optional Europe PMC smoke.

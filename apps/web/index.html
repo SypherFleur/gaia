@@ -131,6 +131,25 @@
           </div>
           <pre id="evidence-output">{}</pre>
         </details>
+        <details open>
+          <summary>Sentinel</summary>
+          <form id="movement-form" class="mini-form">
+            <input name="species" aria-label="Movement species" value="Citrus sinensis" />
+            <select name="plantPart" aria-label="Plant part">
+              <option value="live plant" selected>Live plant</option>
+              <option value="fruit">Fruit</option>
+              <option value="seed">Seed</option>
+              <option value="cutting">Cutting</option>
+            </select>
+            <label class="check"><input name="soilAttached" type="checkbox" /> Soil attached</label>
+            <button class="small" type="submit">Check</button>
+          </form>
+          <div class="sentinel-card" id="sentinel-card">
+            <strong id="sentinel-status">UNRESOLVED</strong>
+            <span id="sentinel-freshness">freshness: idle</span>
+          </div>
+          <pre id="sentinel-output">{}</pre>
+        </details>
       </aside>
     </main>
     <script src="./app.js"></script>

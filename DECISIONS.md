@@ -413,3 +413,31 @@ Metadata and abstracts may be cached only according to source policy. Full text,
 ## D103. Research Annotations Are Tenant-Scoped
 
 Public research metadata may be shared safely, but institutional/private collections and annotations are scoped to organization and workspace and cannot cross tenants.
+
+## D104. Sentinel Provider Boundary Is Mandatory
+
+GAIA Sentinel uses provider-neutral `RegulationProvider`, `RegulationRequest`, `RegulationResponse`, `RegulatoryRule`, and `RegulatoryZone` contracts. Domain and API objects must not depend directly on APHIS, Texas Agriculture, Florida, Singapore, or provider-specific response shapes.
+
+## D105. Regulatory Decisions Fail Closed
+
+Current movement authorization requires current regulatory evidence. Stale, unavailable, conflicting, ambiguous, or incomplete evidence returns `UNRESOLVED`; it must not become `ALLOWED`.
+
+## D106. Jurisdiction Packs Combine Layers
+
+Sentinel movement decisions combine country, federal/national, state/region, county/district, quarantine polygon/zone, and facility/property context where available. County difference alone is not a legal rule.
+
+## D107. Exceptions Must Survive Rule Matching
+
+Regulatory exceptions are first-class rule data. Matching evaluates exceptions before applying a rule, and decisions preserve exception metadata for review.
+
+## D108. Official Current Authority Outranks Informational Sources
+
+Binding and current official authority sources are preferred for movement status. Blogs, community sources, germplasm availability, and model memory cannot determine regulatory permission.
+
+## D109. Sentinel Is Read-Only In Phase 8
+
+Phase 8 does not file permits, submit reports, contact regulators, pay fees, or perform automated regulatory write workflows. It only provides read-only decision support and evidence-preservation guidance.
+
+## D110. Vision And Genesys Escalate To Sentinel
+
+Vision hypotheses tagged as potentially regulated and Genesys legal-shipment questions route to Sentinel. Vision does not diagnose regulated disease, and Genesys accession metadata does not imply import or movement eligibility.
