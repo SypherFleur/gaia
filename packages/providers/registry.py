@@ -20,6 +20,7 @@ class ProviderType(str, Enum):
     MARKET = "MARKET"
     RESEARCH = "RESEARCH"
     TAXONOMY = "TAXONOMY"
+    GERMPLASM = "GERMPLASM"
     REGULATION = "REGULATION"
     VISION = "VISION"
     CALENDAR = "CALENDAR"
@@ -182,7 +183,7 @@ def default_protocol_two_registry() -> ProviderRegistry:
         _provider("usda-nass", "USDA NASS Quick Stats", ProviderType.MARKET, "USDA NASS", BillingClass.FREE, AuthenticationRequirement.OPTIONAL_API_KEY, FreshnessClass.MEDIUM, "US"),
         _provider("usda-ams", "USDA AMS MyMarketNews", ProviderType.MARKET, "USDA AMS", BillingClass.FREE, AuthenticationRequirement.OPTIONAL_API_KEY, FreshnessClass.SHORT, "US"),
         _provider("gbif", "GBIF", ProviderType.TAXONOMY, "GBIF", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.LONG),
-        _provider("genesys-pgr", "Genesys PGR", ProviderType.TAXONOMY, "Genesys PGR", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.LONG),
+        _provider("genesys-pgr", "Genesys PGR", ProviderType.GERMPLASM, "Genesys PGR", BillingClass.FREE, AuthenticationRequirement.OAUTH, FreshnessClass.LONG),
         _provider("europe-pmc", "Europe PMC", ProviderType.RESEARCH, "Europe PMC", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.MEDIUM),
         _provider("plantnet", "Pl@ntNet", ProviderType.VISION, "Pl@ntNet", BillingClass.FREE, AuthenticationRequirement.REQUIRED_API_KEY, FreshnessClass.SHORT, quota_policy=ProviderQuotaPolicy(daily_requests=500)),
         _provider("aphis", "APHIS", ProviderType.REGULATION, "USDA APHIS", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.REGULATORY_CURRENT, "US"),

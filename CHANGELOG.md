@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added Phase 5 Botanist, GBIF taxonomy boundary, Genesys PGR germplasm boundary, canonical plant profile generation, expanded UserPlant/Observation fields, plant-aware orchestration context, Plant Workspace API helpers, and plant workspace development UI.
+- Added migration `0005_botanist_plant_workspace.sql` for expanded plant/taxonomy/user-plant/observation fields, plant-linked conversations/guidance, and `plant_profiles`.
+- Added Phase 5 tests covering accepted/synonym/ambiguous/unresolved taxonomy, tenant boundaries, provenance/conflicts, germplasm caveats, cached botanical facts, plant-aware chat context, model-run accounting, and GBIF/Genesys outage behavior.
 - Added Phase 4 Model Gateway, local Ollama adapter, normalized model request/response/capability types, fixture model provider, prompt harness versioning, structured GuidancePlan validation, and ModelRun request/response hashing.
 - Added Phase 4 GAIA orchestrator, deterministic chat routing, conversation/message persistence, chat API helpers with simple streaming events, and development chat diagnostics UI.
 - Added migration `0004_chat_model_gateway.sql` for prompt harnesses, conversations, messages, and expanded ModelRun audit fields.

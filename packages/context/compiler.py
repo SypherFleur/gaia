@@ -17,14 +17,21 @@ class ContextBundle:
     environmental_snapshot: object | None
     atlas: AtlasResult
     terra: TerraResult | None
+    botanist_context: object | None = None
     model_run_count: int = 0
 
     def to_dict(self) -> dict:
         geo = asdict(self.geo_context)
         snapshot = asdict(self.environmental_snapshot) if self.environmental_snapshot is not None else None
+        botanist = (
+            self.botanist_context.to_dict()
+            if self.botanist_context is not None and hasattr(self.botanist_context, "to_dict")
+            else self.botanist_context
+        )
         return {
             "geo_context": geo,
             "environmental_snapshot": snapshot,
+            "botanist_context": botanist,
             "atlas_provider_statuses": self.atlas.provider_statuses,
             "terra_provider_statuses": snapshot.get("provider_statuses", {}) if snapshot is not None else {},
             "source_record_ids": sorted(

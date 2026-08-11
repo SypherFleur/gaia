@@ -333,3 +333,31 @@ Retrieved environmental/geographic content may be evidence, but it is not allowe
 ## D083. Chat Memory Is GAIA-Owned
 
 Conversations and messages are persisted in GAIA tables. Agent framework checkpoint formats or provider-specific chat formats must not become GAIA's permanent memory model.
+
+## D084. Botanist Owns Canonical Plant Context
+
+Botanist resolves taxonomy, canonical names, synonym relationships, plant profiles, germplasm search, and user-plant context. It must assemble structured botanical context without requiring a model call.
+
+## D085. Cultivar Identity Stays Separate From Species Identity
+
+Species identity belongs to `PlantEntity`; cultivar belongs to user plant/context until a source-backed cultivar registry is introduced. GAIA must not merge names like `Cherokee Purple` into `Solanum lycopersicum` species identity.
+
+## D086. Common Names May Be Ambiguous
+
+Common-name matches must not silently choose a species when multiple canonical taxa are plausible. Ambiguous taxonomy lookups return alternatives and require disambiguation.
+
+## D087. GBIF Occurrence Is Not Suitability
+
+GBIF occurrence/distribution data is evidence of observed presence, not proof that a plant is suitable for cultivation at a user's location.
+
+## D088. Genesys Discovery Is Not Movement Or Availability Approval
+
+A Genesys accession result does not prove legal shipment, commercial availability, import eligibility, cost, or agronomic suitability. Sentinel and future market/supply-chain workflows handle those questions later.
+
+## D089. Plant Profiles Preserve Field Provenance And Conflicts
+
+Derived plant profile fields must carry source-backed provenance. Conflicting source values remain inspectable rather than being flattened invisibly.
+
+## D090. Observed Facts And GAIA Hypotheses Are Separate
+
+Plant observations store user-observed facts separately from GAIA inferences or hypotheses. Hypotheses must never be promoted silently into canonical plant data.

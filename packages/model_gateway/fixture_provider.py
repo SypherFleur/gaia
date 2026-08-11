@@ -11,6 +11,7 @@ class FixtureGuidanceModelProvider(ModelProvider):
         self.model = "fixture-guidance-local"
         self.malformed = malformed
         self.injected_source_id = injected_source_id
+        self.last_request = None
 
     async def capabilities(self) -> ModelCapabilities:
         return ModelCapabilities(
@@ -24,6 +25,7 @@ class FixtureGuidanceModelProvider(ModelProvider):
         )
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
+        self.last_request = request
         if self.malformed:
             content = "not-json: pretend this is a GuidancePlan"
         else:

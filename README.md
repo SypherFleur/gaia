@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 4: Core Chat and Model Gateway.
+Phase 5: Botanist and Plant Workspace.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -83,3 +83,16 @@ Atlas resolves normalized geography and zone containment. Terra compiles environ
 The Model Gateway owns provider-neutral inference. Local Ollama is an adapter, not a dependency. The orchestrator classifies requests before selecting any model, persists conversations/messages in GAIA tables, and refuses to persist malformed GuidancePlans.
 
 Model-generated source IDs and citations are rejected. Source records are attached by GAIA from trusted Atlas/Terra context provenance.
+
+## Phase 5 Botanist And Plant Workspace
+
+Botanist adds canonical plant intelligence:
+
+- GBIF-backed taxonomy and synonym resolution through the Tool Gateway.
+- Genesys PGR germplasm discovery through the Tool Gateway.
+- Source-backed `PlantProfile` records with field provenance and conflicts.
+- User-owned plant records with cultivar, lifecycle stage, growing method, notes, tags, location, and archived/deleted state.
+- Observation timelines that keep observed facts separate from GAIA hypotheses.
+- Plant-aware chat context for “Ask GAIA about this plant.”
+
+Taxonomy lookup, plant retrieval, observation retrieval, germplasm lookup, and Botanist context generation do not require model inference. Reasoning still records a ModelRun only when the local model is used.

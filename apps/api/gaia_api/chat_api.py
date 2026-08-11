@@ -14,8 +14,9 @@ async def post_chat(
     *,
     message: str,
     location_id: str,
+    user_plant_id: str | None = None,
 ) -> dict:
-    result = await orchestrator.handle_chat(context, message=message, location_id=location_id)
+    result = await orchestrator.handle_chat(context, message=message, location_id=location_id, user_plant_id=user_plant_id)
     return _chat_result_dict(result)
 
 
@@ -26,12 +27,14 @@ async def post_chat_message(
     conversation_id: str,
     message: str,
     location_id: str,
+    user_plant_id: str | None = None,
 ) -> dict:
     result = await orchestrator.handle_chat(
         context,
         conversation_id=conversation_id,
         message=message,
         location_id=location_id,
+        user_plant_id=user_plant_id,
     )
     return _chat_result_dict(result)
 
@@ -42,6 +45,7 @@ async def stream_chat_message(
     *,
     message: str,
     location_id: str,
+    user_plant_id: str | None = None,
     conversation_id: str | None = None,
 ) -> AsyncIterator[dict]:
     yield {"event": "route_pending"}
@@ -50,6 +54,7 @@ async def stream_chat_message(
         conversation_id=conversation_id,
         message=message,
         location_id=location_id,
+        user_plant_id=user_plant_id,
     )
     yield {"event": "route", "route": result.route, "model_run_count": result.model_run_count}
     for chunk in _chunks(result.content):

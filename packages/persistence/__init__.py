@@ -1,4 +1,3 @@
-from .sqlite import GaiaRepository, connect_in_memory, initialize_schema
+from .sqlite import GaiaRepository, TenantAccessError, connect_in_memory, initialize_schema
 
-__all__ = ["GaiaRepository", "connect_in_memory", "initialize_schema"]
-
+__all__ = ["GaiaRepository", "TenantAccessError", "connect_in_memory", "initialize_schema"]

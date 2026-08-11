@@ -42,6 +42,7 @@ class MigrationSchemaTest(unittest.TestCase):
             "prompt_harnesses",
             "conversations",
             "messages",
+            "plant_profiles",
         }
 
         rows = connection.execute(

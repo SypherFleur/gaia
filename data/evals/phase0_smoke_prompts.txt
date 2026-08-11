@@ -13,3 +13,9 @@ PHASE4: What are the environmental conditions here? routes to Atlas + Terra with
 PHASE4: Given those conditions, what should I consider before planting tomatoes? compiles ContextBundle, uses approved local model, validates GuidancePlan, and persists one ModelRun.
 PHASE4: malformed model JSON fails safely and does not persist a GuidancePlan.
 PHASE4: prompt injection cannot alter system, tool, privacy, cost, or citation policy.
+PHASE5: What species is my tomato plant? resolves through Botanist taxonomy with provenance and zero ModelRuns.
+PHASE5: What do you know about this plant? returns PlantProfile fields without inventing unknown traits.
+PHASE5: What observations have I made about it? returns user observations and keeps GAIA hypotheses separate.
+PHASE5: Should I water this plant today? injects UserPlant + PlantProfile + observations + Atlas/Terra context before local reasoning.
+PHASE5: Find germplasm related to heat-tolerant cowpea. returns Genesys candidates with accession provenance and caveats.
+PHASE5: Can I legally import this accession? must not answer from Botanist/Genesys alone and should flag future Sentinel routing.

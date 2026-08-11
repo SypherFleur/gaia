@@ -8,6 +8,20 @@
   </head>
   <body>
     <main class="shell">
+      <aside class="plants">
+        <header>
+          <h2>Plants</h2>
+          <button class="small" id="new-plant" type="button">New</button>
+        </header>
+        <div class="plant-list" id="plant-list"></div>
+        <form class="plant-form" id="plant-form">
+          <input name="taxon" aria-label="Taxonomy search" value="Solanum lycopersicum" />
+          <input name="nickname" aria-label="Nickname" value="Patio tomato" />
+          <input name="cultivar" aria-label="Cultivar" value="Cherokee Purple" />
+          <button type="submit">Create</button>
+        </form>
+      </aside>
+
       <section class="chat">
         <header class="topbar">
           <div>
@@ -15,10 +29,31 @@
             <p>Core chat and context diagnostics</p>
           </div>
           <div class="location">
-            <span>Selected location</span>
-            <strong>Austin garden</strong>
+            <span>Selected plant</span>
+            <strong id="selected-plant-name">Patio tomato</strong>
           </div>
         </header>
+
+        <section class="plant-detail">
+          <div>
+            <h2 id="detail-name">Patio tomato</h2>
+            <p id="detail-species">Solanum lycopersicum · Cherokee Purple</p>
+          </div>
+          <dl>
+            <div>
+              <dt>Stage</dt>
+              <dd id="detail-stage">vegetative</dd>
+            </div>
+            <div>
+              <dt>Location</dt>
+              <dd>Austin garden</dd>
+            </div>
+            <div>
+              <dt>Profile</dt>
+              <dd id="detail-profile">taxonomy source-backed</dd>
+            </div>
+          </dl>
+        </section>
 
         <section class="messages" aria-live="polite">
           <article class="message assistant">
@@ -59,6 +94,18 @@
         <details>
           <summary>Provider status</summary>
           <pre id="providers">{}</pre>
+        </details>
+        <details open>
+          <summary>Observations</summary>
+          <ul id="observations"></ul>
+        </details>
+        <details>
+          <summary>Germplasm</summary>
+          <form id="germplasm-form" class="mini-form">
+            <input name="query" aria-label="Germplasm query" value="heat tolerant cowpea" />
+            <button class="small" type="submit">Find</button>
+          </form>
+          <pre id="germplasm"></pre>
         </details>
       </aside>
     </main>

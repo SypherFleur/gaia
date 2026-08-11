@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from packages.context import ContextBundle, ContextCompiler
+from packages.botany import BotanistService
 from packages.domain import Conversation, EvidenceClaim, GuidancePlan, Message
 from packages.model_gateway import (
     GuidancePlanValidationError,
@@ -42,11 +43,13 @@ class GaiaOrchestrator:
         context_compiler: ContextCompiler,
         model_gateway: ModelGateway,
         default_model_provider_id: str = "ollama-local",
+        botanist: BotanistService | None = None,
     ) -> None:
         self.repository = repository
         self.context_compiler = context_compiler
         self.model_gateway = model_gateway
         self.default_model_provider_id = default_model_provider_id
+        self.botanist = botanist
 
     async def handle_chat(
         self,
@@ -54,9 +57,10 @@ class GaiaOrchestrator:
         *,
         message: str,
         location_id: str,
+        user_plant_id: str | None = None,
         conversation_id: str | None = None,
     ) -> ChatResult:
-        conversation = self._ensure_conversation(context, conversation_id, message, location_id)
+        conversation = self._ensure_conversation(context, conversation_id, message, location_id, user_plant_id)
         user_message = self.repository.create_message(
             Message(
                 organization_id=context.organization_id,
@@ -71,7 +75,7 @@ class GaiaOrchestrator:
             return await self._handle_geography(context, conversation.id, user_message.id, location_id)
         if route == "environment":
             return await self._handle_environment(context, conversation.id, user_message.id, location_id)
-        return await self._handle_reasoning(context, conversation.id, user_message.id, location_id, message)
+        return await self._handle_reasoning(context, conversation.id, user_message.id, location_id, message, user_plant_id)
 
     async def _handle_geography(
         self,
@@ -167,8 +171,19 @@ class GaiaOrchestrator:
         user_message_id: str,
         location_id: str,
         message: str,
+        user_plant_id: str | None = None,
     ) -> ChatResult:
         bundle = await self.context_compiler.build_environmental_context(context, location_id)
+        if user_plant_id is not None and self.botanist is not None:
+            botanist_context = await self.botanist.build_context(context, user_plant_id)
+            bundle = ContextBundle(
+                geo_context=bundle.geo_context,
+                environmental_snapshot=bundle.environmental_snapshot,
+                atlas=bundle.atlas,
+                terra=bundle.terra,
+                botanist_context=botanist_context,
+                model_run_count=bundle.model_run_count,
+            )
         context_dict = bundle.to_dict()
         source_record_ids = context_dict["source_record_ids"]
         prompt = build_guidance_prompt(message, context_dict)
@@ -236,6 +251,7 @@ class GaiaOrchestrator:
                 follow_up=draft["follow_up"],
                 geo_context_id=bundle.geo_context.id,
                 environmental_snapshot_id=bundle.environmental_snapshot.id if bundle.environmental_snapshot else None,
+                user_plant_id=user_plant_id,
                 model_run_ids=[model_response.model_run_id] if model_response.model_run_id else [],
             )
         )
@@ -316,6 +332,7 @@ class GaiaOrchestrator:
         conversation_id: str | None,
         message: str,
         location_id: str,
+        user_plant_id: str | None,
     ) -> Conversation:
         if conversation_id is not None:
             raw = self.repository.get_conversation(context.organization_id, conversation_id)
@@ -328,6 +345,7 @@ class GaiaOrchestrator:
                 user_id=raw["user_id"],
                 title=raw["title"],
                 location_id=raw["location_id"],
+                user_plant_id=raw.get("user_plant_id"),
                 state=raw["state"],
                 last_message_at=raw["last_message_at"],
             )
@@ -339,6 +357,7 @@ class GaiaOrchestrator:
                 user_id=context.user_id,
                 title=title,
                 location_id=location_id,
+                user_plant_id=user_plant_id,
             )
         )
 

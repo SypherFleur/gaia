@@ -24,6 +24,7 @@ from packages.domain import (
     Organization,
     Outcome,
     PlantEntity,
+    PlantProfile,
     PromptHarness,
     RegulationRule,
     SeasonPlan,
@@ -255,67 +256,21 @@ class GaiaRepository:
         return geo_context
 
     def create_plant_entity(self, plant_entity: PlantEntity) -> PlantEntity:
-        self.connection.execute(
-            """
-            INSERT INTO plant_entities (
-                id, scientific_name, canonical_taxon_id, common_names, family, genus,
-                species, subspecies, cultivar_optional, crop_group, source_ids,
-                retention_policy, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                plant_entity.id,
-                plant_entity.scientific_name,
-                plant_entity.canonical_taxon_id,
-                _json(plant_entity.common_names),
-                plant_entity.family,
-                plant_entity.genus,
-                plant_entity.species,
-                plant_entity.subspecies,
-                plant_entity.cultivar_optional,
-                plant_entity.crop_group,
-                _json(plant_entity.source_ids),
-                _json(plant_entity.retention_policy),
-                plant_entity.created_at,
-                plant_entity.updated_at,
-                plant_entity.deleted_at,
-            ),
-        )
-        self.connection.commit()
+        values = asdict(plant_entity)
+        for key in ["common_names", "synonyms", "external_source_ids", "source_ids", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("plant_entities", values)
         return plant_entity
 
     def create_user_plant(self, user_plant: UserPlant) -> UserPlant:
         self._require_workspace(user_plant.organization_id, user_plant.workspace_id)
+        self._require_plant_entity(user_plant.plant_entity_id)
         if user_plant.location_id is not None:
             self._require_location(user_plant.organization_id, user_plant.location_id)
-        self.connection.execute(
-            """
-            INSERT INTO user_plants (
-                id, organization_id, workspace_id, plant_entity_id, nickname, cultivar,
-                planted_at, acquired_at, lifecycle_stage, location_id, container_or_bed,
-                status, retention_policy, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                user_plant.id,
-                user_plant.organization_id,
-                user_plant.workspace_id,
-                user_plant.plant_entity_id,
-                user_plant.nickname,
-                user_plant.cultivar,
-                user_plant.planted_at,
-                user_plant.acquired_at,
-                user_plant.lifecycle_stage,
-                user_plant.location_id,
-                user_plant.container_or_bed,
-                user_plant.status,
-                _json(user_plant.retention_policy),
-                user_plant.created_at,
-                user_plant.updated_at,
-                user_plant.deleted_at,
-            ),
-        )
-        self.connection.commit()
+        values = asdict(user_plant)
+        for key in ["tags", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("user_plants", values)
         return user_plant
 
     def create_environmental_snapshot(self, snapshot: EnvironmentalSnapshot) -> EnvironmentalSnapshot:
@@ -348,35 +303,19 @@ class GaiaRepository:
     def create_observation(self, observation: Observation) -> Observation:
         self._require_workspace(observation.organization_id, observation.workspace_id)
         self._require_user_plant(observation.organization_id, observation.user_plant_id)
-        self.connection.execute(
-            """
-            INSERT INTO observations (
-                id, organization_id, workspace_id, user_plant_id, observed_at, author_id,
-                text, images, audio, video, measurements, weather_snapshot_id, source,
-                retention_policy, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                observation.id,
-                observation.organization_id,
-                observation.workspace_id,
-                observation.user_plant_id,
-                observation.observed_at,
-                observation.author_id,
-                observation.text,
-                _json(observation.images),
-                _json(observation.audio),
-                _json(observation.video),
-                _json(observation.measurements),
-                observation.weather_snapshot_id,
-                observation.source,
-                _json(observation.retention_policy),
-                observation.created_at,
-                observation.updated_at,
-                observation.deleted_at,
-            ),
-        )
-        self.connection.commit()
+        values = asdict(observation)
+        for key in [
+            "images",
+            "audio",
+            "video",
+            "measurements",
+            "observed_facts",
+            "gaia_inferences",
+            "health_tags",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("observations", values)
         return observation
 
     def create_media_attachment(self, media: MediaAttachment) -> MediaAttachment:
@@ -409,6 +348,31 @@ class GaiaRepository:
         self.connection.commit()
         return media
 
+    def create_plant_profile(self, plant_profile: PlantProfile) -> PlantProfile:
+        self._require_organization(plant_profile.organization_id)
+        self._require_plant_entity(plant_profile.plant_entity_id)
+        values = asdict(plant_profile)
+        for key in [
+            "taxonomy",
+            "common_names",
+            "temperature_context",
+            "water_context",
+            "soil_context",
+            "light_context",
+            "season_context",
+            "known_pest_links",
+            "known_disease_links",
+            "germplasm_links",
+            "field_provenance",
+            "conflicts",
+            "source_record_ids",
+            "confidence",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("plant_profiles", values)
+        return plant_profile
+
     def create_source_record(self, source_record: SourceRecord) -> SourceRecord:
         if source_record.organization_id is not None:
             self._require_organization(source_record.organization_id)
@@ -437,6 +401,8 @@ class GaiaRepository:
         self._require_workspace(guidance_plan.organization_id, guidance_plan.workspace_id)
         if guidance_plan.conversation_id is not None:
             self._require_conversation(guidance_plan.organization_id, guidance_plan.conversation_id)
+        if guidance_plan.user_plant_id is not None:
+            self._require_user_plant(guidance_plan.organization_id, guidance_plan.user_plant_id)
         if guidance_plan.geo_context_id is not None:
             self._require_geo_context(guidance_plan.organization_id, guidance_plan.geo_context_id)
         if guidance_plan.environmental_snapshot_id is not None:
@@ -579,6 +545,8 @@ class GaiaRepository:
         self._require_membership(conversation.organization_id, conversation.user_id)
         if conversation.location_id is not None:
             self._require_location(conversation.organization_id, conversation.location_id)
+        if conversation.user_plant_id is not None:
+            self._require_user_plant(conversation.organization_id, conversation.user_plant_id)
         values = asdict(conversation)
         values["retention_policy"] = _json(values["retention_policy"])
         self._insert_from_dict("conversations", values)
@@ -610,6 +578,45 @@ class GaiaRepository:
 
     def get_location(self, organization_id: str, location_id: str) -> JsonDict | None:
         return self._get_tenant_row("locations", organization_id, location_id, ["retention_policy"])
+
+    def get_plant_entity(self, plant_entity_id: str) -> JsonDict | None:
+        row = self.connection.execute(
+            "SELECT * FROM plant_entities WHERE id = ? AND deleted_at IS NULL",
+            (plant_entity_id,),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(record, ["common_names", "synonyms", "external_source_ids", "source_ids", "retention_policy"])
+
+    def find_plant_entity_by_taxon_id(self, canonical_taxon_id: str) -> JsonDict | None:
+        row = self.connection.execute(
+            "SELECT * FROM plant_entities WHERE canonical_taxon_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+            (canonical_taxon_id,),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(record, ["common_names", "synonyms", "external_source_ids", "source_ids", "retention_policy"])
+
+    def list_user_plants(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT up.*, pe.scientific_name, pe.common_names
+            FROM user_plants up
+            JOIN plant_entities pe ON pe.id = up.plant_entity_id
+            WHERE up.organization_id = ? AND up.workspace_id = ? AND up.deleted_at IS NULL
+            ORDER BY up.created_at DESC, up.id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        records = []
+        for row in rows:
+            record = dict(row)
+            record = _decode_json_fields(record, ["tags", "common_names", "retention_policy"])
+            records.append(record)
+        return records
 
     def get_geo_context(self, organization_id: str, geo_context_id: str) -> JsonDict | None:
         return self._get_tenant_row(
@@ -654,14 +661,66 @@ class GaiaRepository:
         )
 
     def get_user_plant(self, organization_id: str, user_plant_id: str) -> JsonDict | None:
-        return self._get_tenant_row("user_plants", organization_id, user_plant_id, ["retention_policy"])
+        return self._get_tenant_row("user_plants", organization_id, user_plant_id, ["tags", "retention_policy"])
 
     def get_observation(self, organization_id: str, observation_id: str) -> JsonDict | None:
         return self._get_tenant_row(
             "observations",
             organization_id,
             observation_id,
-            ["images", "audio", "video", "measurements", "retention_policy"],
+            ["images", "audio", "video", "measurements", "observed_facts", "gaia_inferences", "health_tags", "retention_policy"],
+        )
+
+    def list_observations(self, organization_id: str, user_plant_id: str) -> list[JsonDict]:
+        self._require_user_plant(organization_id, user_plant_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM observations
+            WHERE organization_id = ? AND user_plant_id = ? AND deleted_at IS NULL
+            ORDER BY observed_at DESC, id
+            """,
+            (organization_id, user_plant_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(
+                dict(row),
+                ["images", "audio", "video", "measurements", "observed_facts", "gaia_inferences", "health_tags", "retention_policy"],
+            )
+            for row in rows
+        ]
+
+    def get_latest_plant_profile(self, organization_id: str, plant_entity_id: str) -> JsonDict | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM plant_profiles
+            WHERE organization_id = ? AND plant_entity_id = ? AND deleted_at IS NULL
+            ORDER BY version DESC, created_at DESC
+            LIMIT 1
+            """,
+            (organization_id, plant_entity_id),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(
+            record,
+            [
+                "taxonomy",
+                "common_names",
+                "temperature_context",
+                "water_context",
+                "soil_context",
+                "light_context",
+                "season_context",
+                "known_pest_links",
+                "known_disease_links",
+                "germplasm_links",
+                "field_provenance",
+                "conflicts",
+                "source_record_ids",
+                "confidence",
+                "retention_policy",
+            ],
         )
 
     def get_media_attachment(self, organization_id: str, media_id: str) -> JsonDict | None:
@@ -785,6 +844,7 @@ class GaiaRepository:
             "calendar_bindings",
             "conversations",
             "messages",
+            "plant_profiles",
         }
         if table not in allowed_tables:
             raise ValueError(f"Soft delete not supported for {table}")
@@ -863,6 +923,10 @@ class GaiaRepository:
     def _require_user_plant(self, organization_id: str, user_plant_id: str) -> None:
         if self.get_user_plant(organization_id, user_plant_id) is None:
             raise TenantAccessError("UserPlant is missing or inaccessible for this organization")
+
+    def _require_plant_entity(self, plant_entity_id: str) -> None:
+        if self.get_plant_entity(plant_entity_id) is None:
+            raise TenantAccessError("PlantEntity is missing or inaccessible")
 
     def _require_observation(self, organization_id: str, observation_id: str) -> None:
         if self.get_observation(organization_id, observation_id) is None:

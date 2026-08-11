@@ -16,7 +16,7 @@ body {
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
 }
 
 .chat {
@@ -24,6 +24,51 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 100vh;
   background: #ffffff;
+}
+
+.plants {
+  border-right: 1px solid #dbe3da;
+  padding: 18px;
+  background: #f8faf7;
+}
+
+.plants header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.plant-list {
+  display: grid;
+  gap: 8px;
+}
+
+.plant-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #dbe3da;
+  background: #ffffff;
+  color: #1d2a22;
+  padding: 10px;
+}
+
+.plant-card strong,
+.plant-card span {
+  display: block;
+}
+
+.plant-card span {
+  color: #617166;
+  font-size: 12px;
+}
+
+.plant-form,
+.mini-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .topbar {
@@ -44,6 +89,22 @@ p {
 h1 {
   font-size: 24px;
   letter-spacing: 0;
+}
+
+.plant-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #dbe3da;
+  background: #fbfcfa;
+}
+
+.plant-detail dl {
+  display: flex;
+  gap: 18px;
+  margin: 0;
 }
 
 .topbar p,
@@ -100,6 +161,11 @@ button {
   font: inherit;
 }
 
+button.small {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 input {
   border: 1px solid #bdcabe;
   padding: 0 12px;
@@ -150,9 +216,14 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .plants,
   .diagnostics {
     border-left: 0;
     border-top: 1px solid #dbe3da;
+  }
+
+  .plants {
+    border-right: 0;
   }
 
   .topbar {
@@ -162,5 +233,11 @@ pre {
 
   .location {
     text-align: left;
+  }
+
+  .plant-detail,
+  .plant-detail dl {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -17,6 +17,18 @@ MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
 ConversationState = Literal["active", "archived"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
+GrowthStage = Literal[
+    "seed",
+    "germinating",
+    "seedling",
+    "vegetative",
+    "flowering",
+    "fruiting",
+    "harvest",
+    "dormant",
+    "senescent",
+    "unknown",
+]
 
 
 def new_id() -> str:
@@ -118,6 +130,7 @@ class GeoContext(EntityMetadata):
 class PlantEntity(EntityMetadata):
     scientific_name: str = ""
     canonical_taxon_id: str | None = None
+    kingdom: str | None = None
     common_names: list[str] = field(default_factory=list)
     family: str | None = None
     genus: str | None = None
@@ -125,6 +138,12 @@ class PlantEntity(EntityMetadata):
     subspecies: str | None = None
     cultivar_optional: str | None = None
     crop_group: str | None = None
+    edible_classification: str | None = None
+    native_status: str | None = None
+    introduced_status: str | None = None
+    synonyms: list[JsonDict] = field(default_factory=list)
+    external_source_ids: JsonDict = field(default_factory=dict)
+    canonical_name_source_record_id: str | None = None
     source_ids: list[str] = field(default_factory=list)
 
 
@@ -137,10 +156,15 @@ class UserPlant(EntityMetadata):
     cultivar: str | None = None
     planted_at: str | None = None
     acquired_at: str | None = None
-    lifecycle_stage: str | None = None
+    lifecycle_stage: GrowthStage | str | None = None
     location_id: str | None = None
     container_or_bed: str | None = None
+    growing_method: str | None = None
+    biocube_reference: str | None = None
     status: str = "active"
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
+    archived_at: str | None = None
 
 
 @dataclass(slots=True)
@@ -157,6 +181,12 @@ class Observation(EntityMetadata):
     measurements: JsonDict = field(default_factory=dict)
     weather_snapshot_id: str | None = None
     source: ObservationSource = "user"
+    observed_facts: list[JsonDict] = field(default_factory=list)
+    gaia_inferences: list[JsonDict] = field(default_factory=list)
+    lifecycle_stage_observed: GrowthStage | str | None = None
+    health_tags: list[str] = field(default_factory=list)
+    action_id: str | None = None
+    outcome_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -212,6 +242,7 @@ class GuidancePlan(EntityMetadata):
     organization_id: str = ""
     conversation_id: str | None = None
     workspace_id: str = ""
+    user_plant_id: str | None = None
     subject: str = ""
     situation: str = ""
     recommendations: list[JsonDict] = field(default_factory=list)
@@ -328,8 +359,34 @@ class Conversation(EntityMetadata):
     user_id: str = ""
     title: str = ""
     location_id: str | None = None
+    user_plant_id: str | None = None
     state: ConversationState = "active"
     last_message_at: str | None = None
+
+
+@dataclass(slots=True)
+class PlantProfile(EntityMetadata):
+    organization_id: str = ""
+    plant_entity_id: str = ""
+    version: int = 1
+    taxonomy: JsonDict = field(default_factory=dict)
+    common_names: list[str] = field(default_factory=list)
+    crop_group: str | None = None
+    growth_habit: str | None = None
+    lifecycle: str | None = None
+    temperature_context: JsonDict = field(default_factory=dict)
+    water_context: JsonDict = field(default_factory=dict)
+    soil_context: JsonDict = field(default_factory=dict)
+    light_context: JsonDict = field(default_factory=dict)
+    season_context: JsonDict = field(default_factory=dict)
+    known_pest_links: list[JsonDict] = field(default_factory=list)
+    known_disease_links: list[JsonDict] = field(default_factory=list)
+    germplasm_links: list[JsonDict] = field(default_factory=list)
+    field_provenance: JsonDict = field(default_factory=dict)
+    conflicts: list[JsonDict] = field(default_factory=list)
+    source_record_ids: list[str] = field(default_factory=list)
+    confidence: JsonDict = field(default_factory=dict)
+    completeness: float = 0.0
 
 
 @dataclass(slots=True)

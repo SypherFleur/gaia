@@ -155,6 +155,12 @@ class ToolGateway:
                 self._usage(context, tool, provider.provider_id, "denied", request)
                 return ToolResult.denied(quota_decision.reason)
 
+            cached = await self._cache_result_if_allowed(provider.provider_id, request)
+            if cached is not None and cached.cache_state == CacheState.FRESH:
+                self._audit(context, tool, "cache_hit", "fresh_cache", provider.provider_id, cached.provenance[0].id if cached.provenance else None)
+                self._usage(context, tool, provider.provider_id, "cache_hit", request, cache_hit=True)
+                return cached
+
         try:
             result = await tool.execute(context, request)
         except TimeoutError:
@@ -262,7 +268,7 @@ class ToolGateway:
         return ToolResult(
             data=cache_record.payload or {},
             provenance=provenance,
-            warnings=["served_from_cache_after_quota_exhaustion"],
+            warnings=["served_from_cache"],
             status="cache_hit",
             cache_state=cache_record.state,
         )
