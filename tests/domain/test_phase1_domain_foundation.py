@@ -274,7 +274,7 @@ class Phase1DomainFoundationTest(unittest.TestCase):
 
         self.assertEqual(policy.hard_monthly_usd, 0.0)
         self.assertFalse(policy.allow_overage)
-        self.assertEqual(policy.billing_class, "local")
+        self.assertEqual(policy.billing_class, "LOCAL")
 
     def test_domain_models_do_not_require_external_api_keys(self) -> None:
         required_models = [

@@ -17,9 +17,11 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 1: identity, tenancy, and canonical core domain foundation.
+Phase 2: Tool Gateway, Cost Firewall, provider registry, provenance, cache, audit, and usage ledger foundation.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
+
+Phase 2 adds deterministic mock provider/tool execution so cost, quota, permission, tenant, egress, provenance, cache, audit, and ledger controls can be proven before live Atlas/Terra adapters are introduced.
 
 ## Local Commands
 
@@ -41,3 +43,9 @@ Docker is installed on the inspected machine, but Docker Desktop was not running
 GAIA's core domain is standalone. GreensWrld or other Cillian application schemas integrate later through adapters and mappings.
 
 Authentication is provider-neutral. Local development may use deterministic development identities for tests, but development authentication is not production authentication. Authorization and tenancy remain GAIA-owned.
+
+## Phase 2 Tool Boundary
+
+Provider-backed calls must pass the GAIA Tool Gateway. A tool receives `ToolExecutionContext`, never global tenant state. The gateway enforces provider enabled state, Cost Firewall, quota policy, permissions, data egress, provenance capture, audit events, and usage ledger records.
+
+No paid provider can execute automatically. Credentials do not authorize spend.

@@ -213,3 +213,59 @@ Do not design a special student/minor workflow yet. Institution architecture mus
 ## D053. English First, Locale-Aware Architecture
 
 English is first. Architecture remains locale-aware and Unicode-safe. Do not spend MVP time implementing multilingual generation.
+
+## D054. Provider Registry Before Live Adapters
+
+GAIA maintains a canonical provider registry before implementing live agricultural adapters. Provider records include identity, type, authority, enabled state, billing class, cost policy, quota policy, authentication requirement, geography, cache policy, license metadata, attribution, health status, and remote/local execution posture.
+
+## D055. No Manual-Paid Provider Enabled by Default
+
+Provider registry records may describe future `MANUAL_PAID` providers, but no manual-paid provider may be enabled by default. Credentials never imply authorization to spend money.
+
+## D056. Tool Calls Must Pass Cost Firewall
+
+Every provider-backed tool/model invocation must pass provider lookup, enabled-state check, cost policy, budget policy, overage policy, and quota policy before execution.
+
+## D057. Quotas Are Independent of Cost
+
+Free/local providers may still have quota limits. Quota exhaustion must deny execution or use approved cache/fallback behavior; it must not trigger paid upgrade or paid fallback.
+
+## D058. Local Usage Ledger
+
+GAIA records local usage events for provider/tool/model calls, including organization, user, workspace, provider, request, usage units, estimated/actual cost, cache hit status, and final status. Free/local calls still record utilization with zero estimated cost.
+
+## D059. Tool Gateway Owns External Execution
+
+LLMs and application code must invoke providers through the GAIA Tool Gateway. The gateway enforces authentication context, tenant authorization, permissions, tool risk policy, provider state, Cost Firewall, quota checks, egress policy, execution, provenance capture, audit, and usage records.
+
+## D060. Tool Execution Context Is Canonical
+
+Each tool invocation receives a `ToolExecutionContext` containing request ID, user, organization, workspace, optional conversation/location, permissions, deployment mode, data egress policy, cost policy, and timestamp. Tools must not reconstruct tenant identity from global state.
+
+## D061. Egress Policy Blocks Protected Remote Use
+
+Data egress policy can independently allow or deny public data, private text, private images, private documents, and exact location egress. Remote providers must be denied before execution when protected data egress is forbidden.
+
+## D062. Provenance Envelope Required for Tool Results
+
+Successful tool results produce or reference provenance records. Unknown source fields remain null or `unknown`; GAIA must not fabricate source metadata.
+
+## D063. Shared Cache Infrastructure
+
+Tools use a provider-neutral cache backend. Cache records track key, provider, freshness, stale window, content hash, provenance reference, and payload. Tools must not invent separate cache systems.
+
+## D064. Source Snapshots by Content Hash
+
+Raw source snapshots may be preserved by content hash when licensing and storage policy allow. Secrets and authorization headers must not be persisted. Public source snapshots may be tenant-independent unless the payload contains user-specific information.
+
+## D065. Local Provider Health State
+
+Provider health starts simple and local: unknown, healthy, degraded, unavailable, quota exhausted, or disabled. Repeated provider failures mark providers degraded/unavailable and prevent endless retry loops.
+
+## D066. Audit Events Exclude Private Raw Payloads
+
+Tool execution audit events record actor, organization, workspace when valid, action, tool/provider, result, reason, timestamp, cost, and provenance reference. Raw private prompts, images, documents, exact coordinates, and secrets are not written into audit metadata.
+
+## D067. Phase 2 Stops Before Live Atlas/Terra
+
+Phase 2 intentionally implements rails and deterministic test tools only. NWS, NASA, USDA, USGS, APHIS, Pl@ntNet, Google Calendar, hosted models, and live agricultural adapters are deferred until Phase 3+.

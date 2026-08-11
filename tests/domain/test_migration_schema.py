@@ -34,6 +34,10 @@ class MigrationSchemaTest(unittest.TestCase):
             "calendar_bindings",
             "source_records",
             "model_runs",
+            "usage_events",
+            "audit_events",
+            "cache_records",
+            "source_snapshots",
         }
 
         rows = connection.execute(
@@ -55,4 +59,3 @@ class MigrationSchemaTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
