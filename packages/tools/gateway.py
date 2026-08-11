@@ -158,9 +158,21 @@ class ToolGateway:
         try:
             result = await tool.execute(context, request)
         except TimeoutError:
+            if provider is not None:
+                cached = await self._cache_result_if_allowed(provider.provider_id, request)
+                if cached is not None:
+                    self._audit(context, tool, "cache_hit", "provider_timeout_stale_cache", provider.provider_id, cached.provenance[0].id if cached.provenance else None)
+                    self._usage(context, tool, provider.provider_id, "cache_hit", request, cache_hit=True)
+                    return cached
             result = self._handle_provider_failure(provider, tool, context, request, "provider_timeout")
             return result
         except Exception as exc:
+            if provider is not None:
+                cached = await self._cache_result_if_allowed(provider.provider_id, request)
+                if cached is not None:
+                    self._audit(context, tool, "cache_hit", "provider_failure_stale_cache", provider.provider_id, cached.provenance[0].id if cached.provenance else None)
+                    self._usage(context, tool, provider.provider_id, "cache_hit", request, cache_hit=True)
+                    return cached
             result = self._handle_provider_failure(provider, tool, context, request, f"provider_failure:{exc.__class__.__name__}")
             return result
 

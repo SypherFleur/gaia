@@ -38,6 +38,7 @@ class MigrationSchemaTest(unittest.TestCase):
             "audit_events",
             "cache_records",
             "source_snapshots",
+            "atlas_zone_features",
         }
 
         rows = connection.execute(
@@ -46,6 +47,7 @@ class MigrationSchemaTest(unittest.TestCase):
         actual_tables = {row["name"] for row in rows}
 
         self.assertTrue(expected_tables.issubset(actual_tables))
+        connection.close()
 
     def test_location_privacy_default_is_approximate(self) -> None:
         connection = connect_in_memory()
@@ -55,6 +57,7 @@ class MigrationSchemaTest(unittest.TestCase):
         defaults = {column["name"]: column["dflt_value"] for column in columns}
 
         self.assertEqual(defaults["privacy_precision"], "'approximate'")
+        connection.close()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Phase 3 Atlas service, coordinate privacy reduction, geospatial provider interfaces, regulatory geometry foundation, Terra service, environmental provider interfaces, fixture adapters, live response normalizers, deterministic calculations, context compiler, and context API boundary.
+- Added migration `0003_atlas_terra_context.sql` for expanded `GeoContext`, expanded `EnvironmentalSnapshot`, and future Atlas zone features.
+- Added Phase 3 tests covering geography, FIPS, non-U.S. structures, privacy reduction, weather timestamps/units, partial provider failures, SSURGO semantics, provenance, zero model calls, Cost Firewall use, exact-location egress denial, cache stale state, and API output shape.
+- Added Atlas/Terra architecture docs and NWS, NASA POWER, USDA Soil Data Access, and USGS Water data-source notes.
 - Added Phase 2 provider registry, Cost Firewall enforcement, quota checks, Tool Gateway, execution context, egress policy, cache backend, provenance records, source snapshots, audit events, usage ledger, provider health monitor, mock tools, and cost status service.
 - Added migration `0002_tool_cost_provenance.sql` for local usage, audit, cache, and snapshot persistence.
 - Added Phase 2 tests covering cost denial, quota exhaustion, cache fallback, permissions, tenant checks, egress denial, provenance, failure handling, audit, and usage reporting.

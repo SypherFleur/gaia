@@ -17,11 +17,19 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 2: Tool Gateway, Cost Firewall, provider registry, provenance, cache, audit, and usage ledger foundation.
+Phase 3: Atlas and Terra real-world context foundation.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
 Phase 2 adds deterministic mock provider/tool execution so cost, quota, permission, tenant, egress, provenance, cache, audit, and ledger controls can be proven before live Atlas/Terra adapters are introduced.
+
+Phase 3 adds the first context engine:
+
+```text
+Location -> Atlas -> GeoContext -> Terra -> EnvironmentalSnapshot
+```
+
+This path uses zero model calls and remains fixture-tested by default.
 
 ## Local Commands
 
@@ -49,3 +57,7 @@ Authentication is provider-neutral. Local development may use deterministic deve
 Provider-backed calls must pass the GAIA Tool Gateway. A tool receives `ToolExecutionContext`, never global tenant state. The gateway enforces provider enabled state, Cost Firewall, quota policy, permissions, data egress, provenance capture, audit events, and usage ledger records.
 
 No paid provider can execute automatically. Credentials do not authorize spend.
+
+## Phase 3 Context Boundary
+
+Atlas resolves normalized geography and zone containment. Terra compiles environmental context from normalized provider outputs and deterministic calculations. Provider-specific JSON does not appear in domain objects or API boundary responses.

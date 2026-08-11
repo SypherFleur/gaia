@@ -269,3 +269,31 @@ Tool execution audit events record actor, organization, workspace when valid, ac
 ## D067. Phase 2 Stops Before Live Atlas/Terra
 
 Phase 2 intentionally implements rails and deterministic test tools only. NWS, NASA, USDA, USGS, APHIS, Pl@ntNet, Google Calendar, hosted models, and live agricultural adapters are deferred until Phase 3+.
+
+## D068. Atlas Answers Zone Containment, Not Legal Meaning
+
+Atlas resolves administrative geography, watershed, hardiness, and geometry-zone containment. Sentinel later interprets legal/regulatory meaning for movement or compliance decisions.
+
+## D069. Coordinate Privacy Is Presentation-Level
+
+Privacy-reduced coordinates are generated for display/API output without mutating stored authorized source coordinates. Exact coordinates may be used internally when authorized, but remote egress must be blocked when exact-location egress policy forbids it.
+
+## D070. Terra Compiles Context Without LLMs
+
+Terra builds `EnvironmentalSnapshot` objects through deterministic tools, provider-normalized data, cache, and local calculations. It must not create `ModelRun` records or require model inference for Phase 3 context generation.
+
+## D071. Environmental Evidence Type Is Mandatory
+
+Environmental values must preserve evidence semantics such as `FORECAST`, `MODELED`, `SURVEY`, and `DERIVED`. NASA POWER modeled data and SSURGO survey data must never be represented as direct sensor readings.
+
+## D072. Partial Environmental Snapshots Are Valid
+
+One unavailable Terra provider must not fail the entire `EnvironmentalSnapshot`. Provider statuses are attached so consumers can distinguish available, unavailable, unsupported, rate-limited, and provider-error contexts.
+
+## D073. Phase 3 Provider Calls Stay Fixture-Tested
+
+Phase 3 implements provider boundaries and live normalizer classes for NWS, NASA POWER, and USDA Soil Data Access, but automated tests use fixtures/replay data and do not call live services.
+
+## D074. USGS Water Boundary First
+
+Because USGS WaterServices is scheduled for early-2027 decommissioning, GAIA starts with a normalized water-provider interface and fixture-backed nearby-site context rather than coupling domain objects to the legacy API shape.

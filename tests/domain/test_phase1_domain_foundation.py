@@ -114,11 +114,17 @@ class Phase1Fixture:
             )
         )
 
+    def close(self) -> None:
+        self.connection.close()
+
 
 class Phase1DomainFoundationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = Phase1Fixture()
         self.repo = self.fixture.repo
+
+    def tearDown(self) -> None:
+        self.fixture.close()
 
     def test_organization_a_cannot_read_organization_b_data(self) -> None:
         self.assertIsNone(

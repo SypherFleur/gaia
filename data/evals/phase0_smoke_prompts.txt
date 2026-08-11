@@ -3,3 +3,8 @@ Will tonight's weather hurt my tomatoes?
 What is this plant? [image]
 What might be causing these leaf spots? [image]
 What happens if the AI quota is exhausted?
+PHASE3: coordinate resolves to state/county with FIPS where applicable.
+PHASE3: coordinate privacy reduction does not leak exact farm coordinates.
+PHASE3: SSURGO soil survey context is never labeled live soil moisture.
+PHASE3: environmental context generation uses zero model calls.
+PHASE3: provider failure produces partial context with provenance.

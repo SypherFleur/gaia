@@ -213,11 +213,12 @@ class GaiaRepository:
         self.connection.execute(
             """
             INSERT INTO geo_contexts (
-                id, organization_id, location_id, generated_at, country, state_or_region,
-                county_or_district, county_fips, hardiness_zone, ecoregion, watershed,
-                climate_zone, regulatory_zones, quarantine_zones, pest_zones,
+                id, organization_id, location_id, generated_at, country, country_code,
+                state_or_region, state_code, county_or_district, county_fips, timezone,
+                elevation_m, hardiness_zone, ecoregion, watershed, climate_zone,
+                regulatory_zones, quarantine_zones, pest_zones,
                 economic_regions, source_record_ids, retention_policy, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 geo_context.id,
@@ -225,9 +226,13 @@ class GaiaRepository:
                 geo_context.location_id,
                 geo_context.generated_at,
                 geo_context.country,
+                geo_context.country_code,
                 geo_context.state_or_region,
+                geo_context.state_code,
                 geo_context.county_or_district,
                 geo_context.county_fips,
+                geo_context.timezone,
+                geo_context.elevation_m,
                 geo_context.hardiness_zone,
                 geo_context.ecoregion,
                 geo_context.watershed,
@@ -319,12 +324,17 @@ class GaiaRepository:
             "precipitation",
             "wind",
             "pressure",
+            "forecast",
             "solar_radiation",
             "photoperiod",
+            "solar_context",
             "soil_context",
             "soil_moisture_context",
             "drought_context",
             "water_context",
+            "season_context",
+            "astronomical_context",
+            "provider_statuses",
             "source_record_ids",
             "retention_policy",
         ]:
@@ -542,6 +552,51 @@ class GaiaRepository:
     def get_workspace(self, organization_id: str, workspace_id: str) -> JsonDict | None:
         return self._get_tenant_row("workspaces", organization_id, workspace_id, ["knowledge_policy", "retention_policy"])
 
+    def get_location(self, organization_id: str, location_id: str) -> JsonDict | None:
+        return self._get_tenant_row("locations", organization_id, location_id, ["retention_policy"])
+
+    def get_geo_context(self, organization_id: str, geo_context_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "geo_contexts",
+            organization_id,
+            geo_context_id,
+            [
+                "regulatory_zones",
+                "quarantine_zones",
+                "pest_zones",
+                "economic_regions",
+                "source_record_ids",
+                "retention_policy",
+            ],
+        )
+
+    def get_environmental_snapshot(self, organization_id: str, snapshot_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "environmental_snapshots",
+            organization_id,
+            snapshot_id,
+            [
+                "temperature",
+                "humidity",
+                "precipitation",
+                "wind",
+                "pressure",
+                "forecast",
+                "solar_radiation",
+                "photoperiod",
+                "solar_context",
+                "soil_context",
+                "soil_moisture_context",
+                "drought_context",
+                "water_context",
+                "season_context",
+                "astronomical_context",
+                "provider_statuses",
+                "source_record_ids",
+                "retention_policy",
+            ],
+        )
+
     def get_user_plant(self, organization_id: str, user_plant_id: str) -> JsonDict | None:
         return self._get_tenant_row("user_plants", organization_id, user_plant_id, ["retention_policy"])
 
@@ -688,42 +743,11 @@ class GaiaRepository:
             raise TenantAccessError("Location is missing or inaccessible for this organization")
 
     def _require_geo_context(self, organization_id: str, geo_context_id: str) -> None:
-        if self._get_tenant_row(
-            "geo_contexts",
-            organization_id,
-            geo_context_id,
-            [
-                "regulatory_zones",
-                "quarantine_zones",
-                "pest_zones",
-                "economic_regions",
-                "source_record_ids",
-                "retention_policy",
-            ],
-        ) is None:
+        if self.get_geo_context(organization_id, geo_context_id) is None:
             raise TenantAccessError("GeoContext is missing or inaccessible for this organization")
 
     def _require_environmental_snapshot(self, organization_id: str, snapshot_id: str) -> None:
-        if self._get_tenant_row(
-            "environmental_snapshots",
-            organization_id,
-            snapshot_id,
-            [
-                "temperature",
-                "humidity",
-                "precipitation",
-                "wind",
-                "pressure",
-                "solar_radiation",
-                "photoperiod",
-                "soil_context",
-                "soil_moisture_context",
-                "drought_context",
-                "water_context",
-                "source_record_ids",
-                "retention_policy",
-            ],
-        ) is None:
+        if self.get_environmental_snapshot(organization_id, snapshot_id) is None:
             raise TenantAccessError("EnvironmentalSnapshot is missing or inaccessible")
 
     def _require_user_plant(self, organization_id: str, user_plant_id: str) -> None:

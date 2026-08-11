@@ -94,9 +94,13 @@ class GeoContext(EntityMetadata):
     location_id: str = ""
     generated_at: str = field(default_factory=now_iso)
     country: str | None = None
+    country_code: str | None = None
     state_or_region: str | None = None
+    state_code: str | None = None
     county_or_district: str | None = None
     county_fips: str | None = None
+    timezone: str | None = None
+    elevation_m: float | None = None
     hardiness_zone: str | None = None
     ecoregion: str | None = None
     watershed: str | None = None
@@ -176,12 +180,17 @@ class EnvironmentalSnapshot(EntityMetadata):
     precipitation: JsonDict = field(default_factory=dict)
     wind: JsonDict = field(default_factory=dict)
     pressure: JsonDict = field(default_factory=dict)
+    forecast: JsonDict = field(default_factory=dict)
     solar_radiation: JsonDict = field(default_factory=dict)
     photoperiod: JsonDict = field(default_factory=dict)
+    solar_context: JsonDict = field(default_factory=dict)
     soil_context: JsonDict = field(default_factory=dict)
     soil_moisture_context: JsonDict = field(default_factory=dict)
     drought_context: JsonDict = field(default_factory=dict)
     water_context: JsonDict = field(default_factory=dict)
+    season_context: JsonDict = field(default_factory=dict)
+    astronomical_context: JsonDict = field(default_factory=dict)
+    provider_statuses: JsonDict = field(default_factory=dict)
     source_record_ids: list[str] = field(default_factory=list)
 
 
@@ -343,4 +352,3 @@ class ModelRun(EntityMetadata):
     cost_usd: float = 0.0
     tool_calls: list[JsonDict] = field(default_factory=list)
     prompt_version: str | None = None
-
