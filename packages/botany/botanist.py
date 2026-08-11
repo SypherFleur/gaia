@@ -31,6 +31,7 @@ class BotanistContext:
     taxonomy_sources: list[str]
     relevant_germplasm: list[JsonDict]
     recent_observations: list[JsonDict]
+    recent_visual_analyses: list[JsonDict]
     model_run_count: int = 0
 
     def to_dict(self) -> JsonDict:
@@ -156,6 +157,7 @@ class BotanistService:
             raise PermissionError("PlantEntity is missing or inaccessible")
         profile = self.repository.get_latest_plant_profile(context.organization_id, plant_entity["id"])
         observations = self.repository.list_observations(context.organization_id, user_plant_id)[:10]
+        visual_analyses = self.repository.list_visual_analyses_for_plant(context.organization_id, user_plant_id)[:5]
         germplasm = []
         if germplasm_query:
             result = await self.search_germplasm(context, germplasm_query)
@@ -168,6 +170,7 @@ class BotanistService:
             taxonomy_sources=plant_entity.get("source_ids", []),
             relevant_germplasm=germplasm,
             recent_observations=observations,
+            recent_visual_analyses=visual_analyses,
             model_run_count=0,
         )
 

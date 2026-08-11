@@ -30,6 +30,7 @@ from packages.domain import (
     SeasonPlan,
     User,
     UserPlant,
+    VisualAnalysis,
     Workspace,
     SourceRecord,
 )
@@ -347,6 +348,33 @@ class GaiaRepository:
         )
         self.connection.commit()
         return media
+
+    def create_visual_analysis(self, visual_analysis: VisualAnalysis) -> VisualAnalysis:
+        self._require_workspace(visual_analysis.organization_id, visual_analysis.workspace_id)
+        self._require_media_attachment(visual_analysis.organization_id, visual_analysis.media_attachment_id)
+        if visual_analysis.user_plant_id is not None:
+            self._require_user_plant(visual_analysis.organization_id, visual_analysis.user_plant_id)
+        if visual_analysis.geo_context_id is not None:
+            self._require_geo_context(visual_analysis.organization_id, visual_analysis.geo_context_id)
+        if visual_analysis.environmental_snapshot_id is not None:
+            self._require_environmental_snapshot(visual_analysis.organization_id, visual_analysis.environmental_snapshot_id)
+        if visual_analysis.model_run_id is not None:
+            self._require_model_run(visual_analysis.organization_id, visual_analysis.model_run_id)
+        values = asdict(visual_analysis)
+        for key in [
+            "image_quality",
+            "plant_candidates",
+            "visual_observations",
+            "visual_hypotheses",
+            "required_next_evidence",
+            "botanist_context",
+            "source_record_ids",
+            "safety_notes",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("visual_analyses", values)
+        return visual_analysis
 
     def create_plant_profile(self, plant_profile: PlantProfile) -> PlantProfile:
         self._require_organization(plant_profile.organization_id)
@@ -726,6 +754,52 @@ class GaiaRepository:
     def get_media_attachment(self, organization_id: str, media_id: str) -> JsonDict | None:
         return self._get_tenant_row("media_attachments", organization_id, media_id, ["metadata", "retention_policy"])
 
+    def get_visual_analysis(self, organization_id: str, visual_analysis_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "visual_analyses",
+            organization_id,
+            visual_analysis_id,
+            [
+                "image_quality",
+                "plant_candidates",
+                "visual_observations",
+                "visual_hypotheses",
+                "required_next_evidence",
+                "botanist_context",
+                "source_record_ids",
+                "safety_notes",
+                "retention_policy",
+            ],
+        )
+
+    def list_visual_analyses_for_plant(self, organization_id: str, user_plant_id: str) -> list[JsonDict]:
+        self._require_user_plant(organization_id, user_plant_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM visual_analyses
+            WHERE organization_id = ? AND user_plant_id = ? AND deleted_at IS NULL
+            ORDER BY created_at DESC, id
+            """,
+            (organization_id, user_plant_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(
+                dict(row),
+                [
+                    "image_quality",
+                    "plant_candidates",
+                    "visual_observations",
+                    "visual_hypotheses",
+                    "required_next_evidence",
+                    "botanist_context",
+                    "source_record_ids",
+                    "safety_notes",
+                    "retention_policy",
+                ],
+            )
+            for row in rows
+        ]
+
     def get_guidance_plan(self, organization_id: str, guidance_plan_id: str) -> JsonDict | None:
         return self._get_tenant_row(
             "guidance_plans",
@@ -845,6 +919,7 @@ class GaiaRepository:
             "conversations",
             "messages",
             "plant_profiles",
+            "visual_analyses",
         }
         if table not in allowed_tables:
             raise ValueError(f"Soft delete not supported for {table}")
@@ -931,6 +1006,10 @@ class GaiaRepository:
     def _require_observation(self, organization_id: str, observation_id: str) -> None:
         if self.get_observation(organization_id, observation_id) is None:
             raise TenantAccessError("Observation is missing or inaccessible for this organization")
+
+    def _require_media_attachment(self, organization_id: str, media_id: str) -> None:
+        if self.get_media_attachment(organization_id, media_id) is None:
+            raise TenantAccessError("MediaAttachment is missing or inaccessible for this organization")
 
     def _require_guidance_plan(self, organization_id: str, guidance_plan_id: str) -> None:
         if self.get_guidance_plan(organization_id, guidance_plan_id) is None:

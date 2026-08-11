@@ -23,6 +23,9 @@ from .models import (
     SourceRecord,
     User,
     UserPlant,
+    VisualAnalysis,
+    VisualHypothesis,
+    VisualObservation,
     Workspace,
 )
 
@@ -51,5 +54,8 @@ __all__ = [
     "SourceRecord",
     "User",
     "UserPlant",
+    "VisualAnalysis",
+    "VisualHypothesis",
+    "VisualObservation",
     "Workspace",
 ]

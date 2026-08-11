@@ -185,6 +185,7 @@ def default_protocol_two_registry() -> ProviderRegistry:
         _provider("gbif", "GBIF", ProviderType.TAXONOMY, "GBIF", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.LONG),
         _provider("genesys-pgr", "Genesys PGR", ProviderType.GERMPLASM, "Genesys PGR", BillingClass.FREE, AuthenticationRequirement.OAUTH, FreshnessClass.LONG),
         _provider("europe-pmc", "Europe PMC", ProviderType.RESEARCH, "Europe PMC", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.MEDIUM),
+        _provider("ollama-llava-local", "Local Ollama LLaVA", ProviderType.VISION, "local", BillingClass.LOCAL, AuthenticationRequirement.LOCAL_ONLY, FreshnessClass.STATIC, enabled=True, remote=False),
         _provider("plantnet", "Pl@ntNet", ProviderType.VISION, "Pl@ntNet", BillingClass.FREE, AuthenticationRequirement.REQUIRED_API_KEY, FreshnessClass.SHORT, quota_policy=ProviderQuotaPolicy(daily_requests=500)),
         _provider("aphis", "APHIS", ProviderType.REGULATION, "USDA APHIS", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.REGULATORY_CURRENT, "US"),
         _provider("google-calendar", "Google Calendar", ProviderType.CALENDAR, "Google", BillingClass.FREE, AuthenticationRequirement.OAUTH, FreshnessClass.SHORT),

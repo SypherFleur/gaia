@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 5: Botanist and Plant Workspace.
+Phase 6: Vision and Multimodal Plant Perception.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -96,3 +96,22 @@ Botanist adds canonical plant intelligence:
 - Plant-aware chat context for “Ask GAIA about this plant.”
 
 Taxonomy lookup, plant retrieval, observation retrieval, germplasm lookup, and Botanist context generation do not require model inference. Reasoning still records a ModelRun only when the local model is used.
+
+## Phase 6 Vision And Multimodal Plant Perception
+
+Vision adds provider-neutral image analysis:
+
+- `VisionProvider`, `VisionRequest`, `VisionResponse`, and `VisionCapabilities` isolate GAIA from any one local or remote vision provider.
+- Local LLaVA through Ollama is available for development smoke tests; automated CI uses deterministic fixtures and does not require GPU, Ollama, live APIs, or large downloads.
+- Pl@ntNet has an adapter boundary and fixtures. A Pl@ntNet key is optional and never required to boot or test GAIA.
+- Visual observations and visual hypotheses are separate. Vision output is not a confirmed plant-health diagnosis.
+- Vision calls pass through the Tool Gateway, Cost Firewall, quota checks, egress policy, cache, audit, and provenance capture.
+- Plant Workspace observations keep visible facts separate from GAIA hypotheses.
+
+Optional local LLaVA smoke:
+
+```powershell
+$env:GAIA_RUN_LLAVA_SMOKE='1'
+$env:GAIA_LLAVA_MODEL='llava:latest'
+py -3.13 -m unittest tests.phase6.test_llava_vision_smoke
+```

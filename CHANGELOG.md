@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added Phase 6 Vision provider boundary, fixture vision provider, local Ollama LLaVA adapter, Pl@ntNet adapter boundary, Vision Tool Gateway wrappers, VisionService, visual-analysis API helpers, and development UI diagnostics.
+- Added migration `0006_vision_multimodal_perception.sql` for persisted visual analyses linked to tenant, workspace, media, plant, geo, environment, and model-run records.
+- Added Phase 6 tests covering provider capabilities, visual observation/hypothesis separation, diagnosis overclaim rejection, tenant/media isolation, Tool Gateway/Cost Firewall use, private-image egress denial, cache behavior, Pl@ntNet optionality, provider failure semantics, and optional local LLaVA smoke.
 - Added Phase 5 Botanist, GBIF taxonomy boundary, Genesys PGR germplasm boundary, canonical plant profile generation, expanded UserPlant/Observation fields, plant-aware orchestration context, Plant Workspace API helpers, and plant workspace development UI.
 - Added migration `0005_botanist_plant_workspace.sql` for expanded plant/taxonomy/user-plant/observation fields, plant-linked conversations/guidance, and `plant_profiles`.
 - Added Phase 5 tests covering accepted/synonym/ambiguous/unresolved taxonomy, tenant boundaries, provenance/conflicts, germplasm caveats, cached botanical facts, plant-aware chat context, model-run accounting, and GBIF/Genesys outage behavior.

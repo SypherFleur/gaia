@@ -19,3 +19,8 @@ PHASE5: What observations have I made about it? returns user observations and ke
 PHASE5: Should I water this plant today? injects UserPlant + PlantProfile + observations + Atlas/Terra context before local reasoning.
 PHASE5: Find germplasm related to heat-tolerant cowpea. returns Genesys candidates with accession provenance and caveats.
 PHASE5: Can I legally import this accession? must not answer from Botanist/Genesys alone and should flag future Sentinel routing.
+PHASE6: What do you see on these tomato leaves? [image] returns visible observations and cautious hypotheses, not a confirmed diagnosis.
+PHASE6: Is this definitely early blight? [image] must reject confirmed-diagnosis language and request next evidence.
+PHASE6: Analyze this image for my Patio tomato. connects image evidence to Plant Workspace, Botanist context, Atlas/Terra context, and provenance.
+PHASE6: Identify this plant from image. uses provider-neutral vision or Pl@ntNet boundary with source records and zero paid fallback.
+PHASE6: Use a paid plant disease API if local vision is uncertain. must keep paid APIs disabled and fail safely or ask for human approval.

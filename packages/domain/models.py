@@ -29,6 +29,7 @@ GrowthStage = Literal[
     "senescent",
     "unknown",
 ]
+VisionAnalysisStatus = Literal["AVAILABLE", "UNAVAILABLE", "PROVIDER_ERROR", "VALIDATION_FAILED"]
 
 
 def new_id() -> str:
@@ -199,6 +200,52 @@ class MediaAttachment(EntityMetadata):
     content_type: str = ""
     byte_size: int = 0
     metadata: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class VisualObservation(EntityMetadata):
+    organization_id: str = ""
+    visual_analysis_id: str = ""
+    label: str = ""
+    description: str = ""
+    visibility: str = "visible"
+    bounding_region: JsonDict | None = None
+    confidence: float | None = None
+    source_record_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class VisualHypothesis(EntityMetadata):
+    organization_id: str = ""
+    visual_analysis_id: str = ""
+    label: str = ""
+    rationale: str = ""
+    confidence: float = 0.0
+    status: str = "hypothesis"
+    required_next_evidence: list[str] = field(default_factory=list)
+    source_record_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class VisualAnalysis(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    user_plant_id: str | None = None
+    media_attachment_id: str = ""
+    provider: str = ""
+    model: str | None = None
+    status: VisionAnalysisStatus | str = "AVAILABLE"
+    image_quality: JsonDict = field(default_factory=dict)
+    plant_candidates: list[JsonDict] = field(default_factory=list)
+    visual_observations: list[JsonDict] = field(default_factory=list)
+    visual_hypotheses: list[JsonDict] = field(default_factory=list)
+    required_next_evidence: list[str] = field(default_factory=list)
+    botanist_context: JsonDict = field(default_factory=dict)
+    geo_context_id: str | None = None
+    environmental_snapshot_id: str | None = None
+    model_run_id: str | None = None
+    source_record_ids: list[str] = field(default_factory=list)
+    safety_notes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

@@ -361,3 +361,23 @@ Derived plant profile fields must carry source-backed provenance. Conflicting so
 ## D090. Observed Facts And GAIA Hypotheses Are Separate
 
 Plant observations store user-observed facts separately from GAIA inferences or hypotheses. Hypotheses must never be promoted silently into canonical plant data.
+
+## D091. Vision Provider Boundary Is Mandatory
+
+GAIA Vision uses provider-neutral `VisionProvider`, `VisionRequest`, `VisionResponse`, and `VisionCapabilities` contracts. Domain, API, and Plant Workspace code must not depend directly on LLaVA, Pl@ntNet, Nemotron, or any other provider-specific response shape.
+
+## D092. Vision Is Evidence, Not Diagnosis
+
+Vision may persist visible observations and cautious hypotheses. It must not persist confirmed diagnoses from image evidence alone. Output containing diagnostic overclaims is rejected or marked validation-failed before useful analysis facts are saved.
+
+## D093. Local LLaVA Is Development Smoke Only
+
+`llava:latest` through local Ollama is supported for practical local smoke testing, but automated tests use fixtures and must not require GPU, Ollama, live APIs, or large downloads.
+
+## D094. Pl@ntNet Is Optional And Free-Tier Governed
+
+Pl@ntNet is represented as a vision provider boundary with fixtures. A Pl@ntNet API key is not required for GAIA to boot or test. Live calls, if enabled later, must pass through the Tool Gateway, Cost Firewall, quota tracking, cache, attribution, and egress policy with no automatic paid upgrade.
+
+## D095. Private Images Are Egress-Protected
+
+Image analysis requests mark image bytes as private by default. Remote vision providers must be denied when deployment or tenant policy forbids private-image egress, regardless of whether the provider is free.

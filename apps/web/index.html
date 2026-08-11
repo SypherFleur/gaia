@@ -37,7 +37,7 @@
         <section class="plant-detail">
           <div>
             <h2 id="detail-name">Patio tomato</h2>
-            <p id="detail-species">Solanum lycopersicum · Cherokee Purple</p>
+            <p id="detail-species">Solanum lycopersicum - Cherokee Purple</p>
           </div>
           <dl>
             <div>
@@ -57,7 +57,7 @@
 
         <section class="messages" aria-live="polite">
           <article class="message assistant">
-            Ask a geography, environmental, or planting question. Deterministic routes should show zero model runs.
+            Ask a geography, environmental, planting, or image-evidence question. Deterministic routes should show zero model runs.
           </article>
         </section>
 
@@ -98,6 +98,21 @@
         <details open>
           <summary>Observations</summary>
           <ul id="observations"></ul>
+        </details>
+        <details open>
+          <summary>Vision</summary>
+          <dl>
+            <div>
+              <dt>Status</dt>
+              <dd id="vision-status">idle</dd>
+            </div>
+            <div>
+              <dt>Provider</dt>
+              <dd id="vision-provider">fixture-vision-local</dd>
+            </div>
+          </dl>
+          <button class="small" id="vision-demo" type="button">Analyze</button>
+          <pre id="vision-output">{}</pre>
         </details>
         <details>
           <summary>Germplasm</summary>
