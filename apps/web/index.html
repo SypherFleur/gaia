@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GAIA Chat Dev</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="chat">
+        <header class="topbar">
+          <div>
+            <h1>GAIA</h1>
+            <p>Core chat and context diagnostics</p>
+          </div>
+          <div class="location">
+            <span>Selected location</span>
+            <strong>Austin garden</strong>
+          </div>
+        </header>
+
+        <section class="messages" aria-live="polite">
+          <article class="message assistant">
+            Ask a geography, environmental, or planting question. Deterministic routes should show zero model runs.
+          </article>
+        </section>
+
+        <form class="composer">
+          <input
+            aria-label="Message"
+            name="message"
+            value="Given those conditions, what should I consider before planting tomatoes?"
+          />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <aside class="diagnostics">
+        <h2>Diagnostics</h2>
+        <dl>
+          <div>
+            <dt>Route</dt>
+            <dd id="route">idle</dd>
+          </div>
+          <div>
+            <dt>Model runs</dt>
+            <dd id="model-runs">0</dd>
+          </div>
+          <div>
+            <dt>Cost</dt>
+            <dd>$0.00</dd>
+          </div>
+          <div>
+            <dt>Sources</dt>
+            <dd id="sources">0</dd>
+          </div>
+        </dl>
+        <details>
+          <summary>Provider status</summary>
+          <pre id="providers">{}</pre>
+        </details>
+      </aside>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

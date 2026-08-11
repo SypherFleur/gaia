@@ -15,4 +15,5 @@ All model access goes through a provider-neutral Model Gateway. Providers advert
 - Nemotron 3 Nano Omni can be benchmarked without becoming a dependency.
 - Ollama, llama.cpp/OpenAI-compatible runtimes, NVIDIA runtimes, Cloudflare Workers AI, or future providers can be swapped.
 - Core domain objects cannot contain provider-native message types.
-
+- Phase 4 implements local Ollama through this boundary and records ModelRun prompt/request/response hashes for audit.
+- Malformed structured output is rejected before GuidancePlan persistence.

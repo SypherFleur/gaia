@@ -1,0 +1,377 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from packages.context import ContextBundle, ContextCompiler
+from packages.domain import Conversation, EvidenceClaim, GuidancePlan, Message
+from packages.model_gateway import (
+    GuidancePlanValidationError,
+    ModelGateway,
+    ModelRequest,
+    build_guidance_prompt,
+    validate_guidance_plan_draft,
+)
+from packages.persistence import GaiaRepository
+from packages.tools import ToolExecutionContext
+
+
+RouteDecision = Literal["geography", "environment", "reasoning"]
+
+
+@dataclass(frozen=True, slots=True)
+class ChatResult:
+    conversation_id: str
+    user_message_id: str
+    assistant_message_id: str
+    route: RouteDecision | str
+    content: str
+    context_bundle: ContextBundle | None = None
+    guidance_plan_id: str | None = None
+    model_run_ids: list[str] | None = None
+    model_run_count: int = 0
+    provider_diagnostics: dict | None = None
+    validation_error: str | None = None
+
+
+class GaiaOrchestrator:
+    def __init__(
+        self,
+        *,
+        repository: GaiaRepository,
+        context_compiler: ContextCompiler,
+        model_gateway: ModelGateway,
+        default_model_provider_id: str = "ollama-local",
+    ) -> None:
+        self.repository = repository
+        self.context_compiler = context_compiler
+        self.model_gateway = model_gateway
+        self.default_model_provider_id = default_model_provider_id
+
+    async def handle_chat(
+        self,
+        context: ToolExecutionContext,
+        *,
+        message: str,
+        location_id: str,
+        conversation_id: str | None = None,
+    ) -> ChatResult:
+        conversation = self._ensure_conversation(context, conversation_id, message, location_id)
+        user_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation.id,
+                role="user",
+                content=message,
+                metadata={"untrusted_user_input": True},
+            )
+        )
+        route = classify_route(message)
+        if route == "geography":
+            return await self._handle_geography(context, conversation.id, user_message.id, location_id)
+        if route == "environment":
+            return await self._handle_environment(context, conversation.id, user_message.id, location_id)
+        return await self._handle_reasoning(context, conversation.id, user_message.id, location_id, message)
+
+    async def _handle_geography(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        location_id: str,
+    ) -> ChatResult:
+        bundle = await self.context_compiler.build_geography_context(context, location_id)
+        geo = bundle.geo_context
+        place = ", ".join(part for part in [geo.county_or_district, geo.state_or_region, geo.country] if part)
+        content = f"Your selected location resolves to {place}."
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="geography",
+                source_record_ids=geo.source_record_ids,
+                metadata={"model_run_count": 0, "provider_statuses": bundle.atlas.provider_statuses},
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="geography",
+            content=content,
+            context_bundle=bundle,
+            model_run_ids=[],
+            model_run_count=0,
+            provider_diagnostics={"atlas": bundle.atlas.provider_statuses},
+        )
+
+    async def _handle_environment(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        location_id: str,
+    ) -> ChatResult:
+        bundle = await self.context_compiler.build_environmental_context(context, location_id)
+        snapshot = bundle.environmental_snapshot
+        geo = bundle.geo_context
+        temperature = snapshot.temperature if snapshot is not None else {}
+        soil = snapshot.soil_context if snapshot is not None else {}
+        temp_text = _measurement_text(temperature)
+        map_unit = soil.get("map_unit")
+        if isinstance(map_unit, dict):
+            soil_text = map_unit.get("name") or soil.get("semantic_note") or "soil survey context unavailable"
+        else:
+            soil_text = map_unit or soil.get("semantic_note") or "soil survey context unavailable"
+        content = (
+            f"For {geo.county_or_district or geo.state_or_region}, GAIA has environmental context. "
+            f"Temperature context: {temp_text}. Soil context: {soil_text}."
+        )
+        source_ids = snapshot.source_record_ids if snapshot is not None else geo.source_record_ids
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="environment",
+                source_record_ids=source_ids,
+                metadata={
+                    "model_run_count": 0,
+                    "atlas_provider_statuses": bundle.atlas.provider_statuses,
+                    "terra_provider_statuses": snapshot.provider_statuses if snapshot is not None else {},
+                },
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="environment",
+            content=content,
+            context_bundle=bundle,
+            model_run_ids=[],
+            model_run_count=0,
+            provider_diagnostics={
+                "atlas": bundle.atlas.provider_statuses,
+                "terra": snapshot.provider_statuses if snapshot is not None else {},
+            },
+        )
+
+    async def _handle_reasoning(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        location_id: str,
+        message: str,
+    ) -> ChatResult:
+        bundle = await self.context_compiler.build_environmental_context(context, location_id)
+        context_dict = bundle.to_dict()
+        source_record_ids = context_dict["source_record_ids"]
+        prompt = build_guidance_prompt(message, context_dict)
+        self.repository.upsert_prompt_harness(prompt.harness)
+        model_request = ModelRequest(
+            messages=prompt.messages,
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.semantic_version,
+            prompt_hash=prompt.prompt_hash,
+            response_format="json",
+            temperature=0.2,
+            max_output_tokens=1200,
+            metadata={"route": "reasoning", "context_source_count": len(source_record_ids)},
+            contains_private_text=True,
+            contains_exact_location=False,
+            estimated_cost_usd=0.0,
+        )
+        model_response = await self.model_gateway.generate(context, self.default_model_provider_id, model_request)
+        if model_response.status != "success":
+            return self._safe_failure(
+                context,
+                conversation_id,
+                user_message_id,
+                bundle,
+                model_response.model_run_id,
+                model_response.error or "model_generation_failed",
+            )
+        try:
+            draft = validate_guidance_plan_draft(model_response.content)
+        except GuidancePlanValidationError as exc:
+            return self._safe_failure(
+                context,
+                conversation_id,
+                user_message_id,
+                bundle,
+                model_response.model_run_id,
+                str(exc),
+            )
+
+        claim_text = _primary_claim(draft)
+        evidence_claim = self.repository.create_evidence_claim(
+            EvidenceClaim(
+                organization_id=context.organization_id,
+                claim_text=claim_text,
+                evidence_grade="C",
+                confidence=float(draft.get("uncertainty", {}).get("confidence", 0.62) or 0.62),
+                source_record_ids=source_record_ids,
+            )
+        )
+        guidance_plan = self.repository.create_guidance_plan(
+            GuidancePlan(
+                organization_id=context.organization_id,
+                workspace_id=context.workspace_id,
+                conversation_id=conversation_id,
+                subject=draft["subject"],
+                situation=draft["situation"],
+                recommendations=draft["recommendations"],
+                actions=draft["actions"],
+                timing=draft["timing"],
+                resources=draft["resources"],
+                evidence_claim_ids=[evidence_claim.id],
+                risks=draft["risks"],
+                uncertainty=draft["uncertainty"],
+                measurements_to_take=draft["measurements_to_take"],
+                follow_up=draft["follow_up"],
+                geo_context_id=bundle.geo_context.id,
+                environmental_snapshot_id=bundle.environmental_snapshot.id if bundle.environmental_snapshot else None,
+                model_run_ids=[model_response.model_run_id] if model_response.model_run_id else [],
+            )
+        )
+        content = _render_guidance_plan(guidance_plan)
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="reasoning",
+                model_run_id=model_response.model_run_id,
+                guidance_plan_id=guidance_plan.id,
+                source_record_ids=source_record_ids,
+                metadata={
+                    "model": model_response.model,
+                    "provider_id": model_response.provider_id,
+                    "validated_guidance_plan": True,
+                    "trusted_source_ids_attached_by": "gaia_orchestrator",
+                },
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="reasoning",
+            content=content,
+            context_bundle=bundle,
+            guidance_plan_id=guidance_plan.id,
+            model_run_ids=[model_response.model_run_id] if model_response.model_run_id else [],
+            model_run_count=1 if model_response.model_run_id else 0,
+            provider_diagnostics={
+                "model": {"provider_id": model_response.provider_id, "model": model_response.model},
+                "atlas": bundle.atlas.provider_statuses,
+                "terra": bundle.environmental_snapshot.provider_statuses if bundle.environmental_snapshot else {},
+            },
+        )
+
+    def _safe_failure(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        bundle: ContextBundle,
+        model_run_id: str | None,
+        reason: str,
+    ) -> ChatResult:
+        content = "I could not safely validate a GuidancePlan from the model output, so I did not save a plan."
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="reasoning_validation_failed",
+                model_run_id=model_run_id,
+                source_record_ids=bundle.to_dict()["source_record_ids"],
+                metadata={"validation_error": reason, "guidance_plan_persisted": False},
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="reasoning_validation_failed",
+            content=content,
+            context_bundle=bundle,
+            guidance_plan_id=None,
+            model_run_ids=[model_run_id] if model_run_id else [],
+            model_run_count=1 if model_run_id else 0,
+            validation_error=reason,
+        )
+
+    def _ensure_conversation(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str | None,
+        message: str,
+        location_id: str,
+    ) -> Conversation:
+        if conversation_id is not None:
+            raw = self.repository.get_conversation(context.organization_id, conversation_id)
+            if raw is None:
+                raise PermissionError("Conversation is missing or inaccessible")
+            return Conversation(
+                id=raw["id"],
+                organization_id=raw["organization_id"],
+                workspace_id=raw["workspace_id"],
+                user_id=raw["user_id"],
+                title=raw["title"],
+                location_id=raw["location_id"],
+                state=raw["state"],
+                last_message_at=raw["last_message_at"],
+            )
+        title = message.strip().splitlines()[0][:80] or "GAIA conversation"
+        return self.repository.create_conversation(
+            Conversation(
+                organization_id=context.organization_id,
+                workspace_id=context.workspace_id,
+                user_id=context.user_id,
+                title=title,
+                location_id=location_id,
+            )
+        )
+
+
+def classify_route(message: str) -> RouteDecision:
+    text = message.lower()
+    if "county" in text or "hardiness zone" in text or "where am i" in text:
+        return "geography"
+    if "environmental condition" in text or "weather" in text or "soil" in text or "temperature" in text:
+        return "environment"
+    return "reasoning"
+
+
+def _measurement_text(measurement: dict) -> str:
+    if not measurement:
+        return "unavailable"
+    value = measurement.get("value")
+    unit = measurement.get("unit")
+    evidence_type = measurement.get("evidence_type")
+    if value is None:
+        return "unavailable"
+    return f"{value} {unit or ''} ({evidence_type or 'unknown evidence'}).".strip()
+
+
+def _primary_claim(draft: dict) -> str:
+    recommendations = draft.get("recommendations") or []
+    if recommendations and isinstance(recommendations[0], dict):
+        return str(recommendations[0].get("summary") or draft["subject"])
+    return str(draft["subject"])
+
+
+def _render_guidance_plan(plan: GuidancePlan) -> str:
+    first_recommendation = plan.recommendations[0] if plan.recommendations else {}
+    summary = first_recommendation.get("summary") if isinstance(first_recommendation, dict) else str(first_recommendation)
+    action = plan.actions[0].get("title") if plan.actions and isinstance(plan.actions[0], dict) else "Review the plan details."
+    return f"{plan.subject}: {summary}\nAction: {action}\nConfidence: {plan.uncertainty.get('level', 'uncertain')}"

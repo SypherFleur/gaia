@@ -39,6 +39,9 @@ class MigrationSchemaTest(unittest.TestCase):
             "cache_records",
             "source_snapshots",
             "atlas_zone_features",
+            "prompt_harnesses",
+            "conversations",
+            "messages",
         }
 
         rows = connection.execute(

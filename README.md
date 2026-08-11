@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 3: Atlas and Terra real-world context foundation.
+Phase 4: Core Chat and Model Gateway.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -31,6 +31,14 @@ Location -> Atlas -> GeoContext -> Terra -> EnvironmentalSnapshot
 
 This path uses zero model calls and remains fixture-tested by default.
 
+Phase 4 adds the first chat/reasoning loop:
+
+```text
+Chat -> GAIA Orchestrator -> deterministic route OR ContextBundle -> Model Gateway -> validated GuidancePlan
+```
+
+Geography and environment questions still produce zero ModelRuns. Reasoning routes require `model.chat`, use an approved local model provider, validate structured output before persistence, and attach trusted provenance from the compiled context rather than from model-generated citations.
+
 ## Local Commands
 
 Windows-friendly commands:
@@ -40,6 +48,14 @@ npm run check
 npm run test
 npm run lint
 npm run eval
+```
+
+Optional local Ollama smoke:
+
+```powershell
+$env:GAIA_RUN_OLLAMA_SMOKE='1'
+$env:GAIA_OLLAMA_MODEL='llama3.1:latest'
+py -3.13 -m unittest tests.phase4.test_ollama_smoke
 ```
 
 Unix-like convenience commands are mirrored in `Makefile`.
@@ -61,3 +77,9 @@ No paid provider can execute automatically. Credentials do not authorize spend.
 ## Phase 3 Context Boundary
 
 Atlas resolves normalized geography and zone containment. Terra compiles environmental context from normalized provider outputs and deterministic calculations. Provider-specific JSON does not appear in domain objects or API boundary responses.
+
+## Phase 4 Chat And Model Boundary
+
+The Model Gateway owns provider-neutral inference. Local Ollama is an adapter, not a dependency. The orchestrator classifies requests before selecting any model, persists conversations/messages in GAIA tables, and refuses to persist malformed GuidancePlans.
+
+Model-generated source IDs and citations are rejected. Source records are attached by GAIA from trusted Atlas/Terra context provenance.

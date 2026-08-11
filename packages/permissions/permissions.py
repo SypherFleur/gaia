@@ -13,6 +13,6 @@ class Permission(str, Enum):
     RESEARCH_READ = "research.read"
     MARKET_READ = "market.read"
     VISION_ANALYZE = "vision.analyze"
+    MODEL_CHAT = "model.chat"
     ADMIN_PROVIDER_CONFIGURE = "admin.provider.configure"
     ADMIN_COST_CONFIGURE = "admin.cost.configure"
-

@@ -297,3 +297,39 @@ Phase 3 implements provider boundaries and live normalizer classes for NWS, NASA
 ## D074. USGS Water Boundary First
 
 Because USGS WaterServices is scheduled for early-2027 decommissioning, GAIA starts with a normalized water-provider interface and fixture-backed nearby-site context rather than coupling domain objects to the legacy API shape.
+
+## D075. Model Gateway Is Provider-Neutral
+
+GAIA routes inference through `ModelProvider`, `ModelRequest`, `ModelResponse`, and `ModelCapabilities`. Domain and orchestration code must not depend directly on Ollama, llama.cpp, hosted APIs, or any specific model family.
+
+## D076. Local Ollama Is An Adapter, Not A Dependency
+
+Phase 4 supports local Ollama because it is installed and has local models available, but Ollama remains replaceable behind the Model Gateway. `llama3.1:latest` is the Phase 4 local smoke-tested text model.
+
+## D077. Deterministic Routing Precedes Model Selection
+
+The GAIA orchestrator must classify and execute deterministic Atlas/Terra routes before model selection. Geography and environmental context questions must produce zero ModelRuns.
+
+## D078. Model Reasoning Requires Explicit Permission
+
+Reasoning routes require `model.chat`. Deterministic geography/environment routes can execute with tool/context permissions and do not require model permission.
+
+## D079. Prompt Harnesses Are Versioned Production Assets
+
+Prompts are tracked by prompt ID, semantic version, schema, compatibility metadata, and stable prompt hash. Per-request and per-response hashes belong on ModelRun records, not on the prompt harness identity.
+
+## D080. GuidancePlan Persistence Requires Validation
+
+Malformed model output must not reach GuidancePlan persistence. GAIA may persist the ModelRun for audit, but the domain GuidancePlan is created only after structured-output validation succeeds.
+
+## D081. Model Citations Are Rejected
+
+Model-generated source IDs, citation IDs, and citation lists are not trusted. GAIA attaches trusted source records from the already-compiled ContextBundle after validation.
+
+## D082. Retrieved Content Is Untrusted For Instructions
+
+Retrieved environmental/geographic content may be evidence, but it is not allowed to modify system, tool, privacy, citation, or cost policy. Prompt-injection tests must preserve this boundary.
+
+## D083. Chat Memory Is GAIA-Owned
+
+Conversations and messages are persisted in GAIA tables. Agent framework checkpoint formats or provider-specific chat formats must not become GAIA's permanent memory model.

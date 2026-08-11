@@ -8,3 +8,8 @@ PHASE3: coordinate privacy reduction does not leak exact farm coordinates.
 PHASE3: SSURGO soil survey context is never labeled live soil moisture.
 PHASE3: environmental context generation uses zero model calls.
 PHASE3: provider failure produces partial context with provenance.
+PHASE4: What county am I in? routes to Atlas with zero ModelRuns and zero cost.
+PHASE4: What are the environmental conditions here? routes to Atlas + Terra with zero ModelRuns and zero cost.
+PHASE4: Given those conditions, what should I consider before planting tomatoes? compiles ContextBundle, uses approved local model, validates GuidancePlan, and persists one ModelRun.
+PHASE4: malformed model JSON fails safely and does not persist a GuidancePlan.
+PHASE4: prompt injection cannot alter system, tool, privacy, cost, or citation policy.

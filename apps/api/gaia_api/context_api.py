@@ -12,7 +12,7 @@ async def post_context_geography(
     location_id: str,
     timestamp: str | None = None,
 ) -> dict:
-    bundle = await compiler.build_environmental_context(context, location_id, timestamp=timestamp)
+    bundle = await compiler.build_geography_context(context, location_id, timestamp=timestamp)
     geo = bundle.geo_context
     return {
         "geo_context": {

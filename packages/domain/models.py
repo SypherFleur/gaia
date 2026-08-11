@@ -15,6 +15,8 @@ EvidenceGrade = Literal["A", "B", "C", "D", "E"]
 MovementStatus = Literal["allowed", "conditional", "restricted", "unresolved"]
 MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
+ConversationState = Literal["active", "archived"]
+MessageRole = Literal["user", "assistant", "system", "tool"]
 
 
 def new_id() -> str:
@@ -320,6 +322,43 @@ class CalendarBinding(EntityMetadata):
 
 
 @dataclass(slots=True)
+class Conversation(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    user_id: str = ""
+    title: str = ""
+    location_id: str | None = None
+    state: ConversationState = "active"
+    last_message_at: str | None = None
+
+
+@dataclass(slots=True)
+class Message(EntityMetadata):
+    organization_id: str = ""
+    conversation_id: str = ""
+    role: MessageRole = "user"
+    content: str = ""
+    content_type: str = "text"
+    route: str | None = None
+    model_run_id: str | None = None
+    guidance_plan_id: str | None = None
+    source_record_ids: list[str] = field(default_factory=list)
+    metadata: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class PromptHarness(EntityMetadata):
+    prompt_id: str = ""
+    semantic_version: str = ""
+    prompt_hash: str = ""
+    intended_task: str = ""
+    model_compatibility: list[str] = field(default_factory=list)
+    output_schema: JsonDict = field(default_factory=dict)
+    evaluation_score: float | None = None
+    active: bool = True
+
+
+@dataclass(slots=True)
 class SourceRecord(EntityMetadata):
     organization_id: str | None = None
     provider: str = ""
@@ -352,3 +391,9 @@ class ModelRun(EntityMetadata):
     cost_usd: float = 0.0
     tool_calls: list[JsonDict] = field(default_factory=list)
     prompt_version: str | None = None
+    prompt_id: str | None = None
+    prompt_hash: str | None = None
+    request_hash: str | None = None
+    response_hash: str | None = None
+    status: str = "success"
+    error: str | None = None

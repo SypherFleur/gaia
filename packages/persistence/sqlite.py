@@ -9,12 +9,14 @@ from typing import Any, Iterable
 from packages.domain import (
     Action,
     CalendarBinding,
+    Conversation,
     EnvironmentalSnapshot,
     EvidenceClaim,
     GeoContext,
     GuidancePlan,
     Location,
     MediaAttachment,
+    Message,
     Membership,
     ModelRun,
     MovementCheck,
@@ -22,6 +24,7 @@ from packages.domain import (
     Organization,
     Outcome,
     PlantEntity,
+    PromptHarness,
     RegulationRule,
     SeasonPlan,
     User,
@@ -432,6 +435,8 @@ class GaiaRepository:
 
     def create_guidance_plan(self, guidance_plan: GuidancePlan) -> GuidancePlan:
         self._require_workspace(guidance_plan.organization_id, guidance_plan.workspace_id)
+        if guidance_plan.conversation_id is not None:
+            self._require_conversation(guidance_plan.organization_id, guidance_plan.conversation_id)
         if guidance_plan.geo_context_id is not None:
             self._require_geo_context(guidance_plan.organization_id, guidance_plan.geo_context_id)
         if guidance_plan.environmental_snapshot_id is not None:
@@ -549,6 +554,57 @@ class GaiaRepository:
         self._insert_from_dict("calendar_bindings", values)
         return calendar_binding
 
+    def create_prompt_harness(self, prompt_harness: PromptHarness) -> PromptHarness:
+        values = asdict(prompt_harness)
+        values["active"] = 1 if prompt_harness.active else 0
+        for key in ["model_compatibility", "output_schema", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("prompt_harnesses", values)
+        return prompt_harness
+
+    def upsert_prompt_harness(self, prompt_harness: PromptHarness) -> PromptHarness:
+        existing = self.connection.execute(
+            """
+            SELECT id FROM prompt_harnesses
+            WHERE prompt_id = ? AND semantic_version = ? AND prompt_hash = ?
+            """,
+            (prompt_harness.prompt_id, prompt_harness.semantic_version, prompt_harness.prompt_hash),
+        ).fetchone()
+        if existing is not None:
+            return prompt_harness
+        return self.create_prompt_harness(prompt_harness)
+
+    def create_conversation(self, conversation: Conversation) -> Conversation:
+        self._require_workspace(conversation.organization_id, conversation.workspace_id)
+        self._require_membership(conversation.organization_id, conversation.user_id)
+        if conversation.location_id is not None:
+            self._require_location(conversation.organization_id, conversation.location_id)
+        values = asdict(conversation)
+        values["retention_policy"] = _json(values["retention_policy"])
+        self._insert_from_dict("conversations", values)
+        return conversation
+
+    def create_message(self, message: Message) -> Message:
+        self._require_conversation(message.organization_id, message.conversation_id)
+        if message.model_run_id is not None:
+            self._require_model_run(message.organization_id, message.model_run_id)
+        if message.guidance_plan_id is not None:
+            self._require_guidance_plan(message.organization_id, message.guidance_plan_id)
+        values = asdict(message)
+        for key in ["source_record_ids", "metadata", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("messages", values)
+        self.connection.execute(
+            """
+            UPDATE conversations
+            SET last_message_at = ?, updated_at = ?
+            WHERE organization_id = ? AND id = ? AND deleted_at IS NULL
+            """,
+            (message.created_at, now_iso(), message.organization_id, message.conversation_id),
+        )
+        self.connection.commit()
+        return message
+
     def get_workspace(self, organization_id: str, workspace_id: str) -> JsonDict | None:
         return self._get_tenant_row("workspaces", organization_id, workspace_id, ["knowledge_policy", "retention_policy"])
 
@@ -634,6 +690,58 @@ class GaiaRepository:
     def get_action(self, organization_id: str, action_id: str) -> JsonDict | None:
         return self._get_tenant_row("actions", organization_id, action_id, ["dependencies", "retention_policy"])
 
+    def get_model_run(self, organization_id: str, model_run_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "model_runs",
+            organization_id,
+            model_run_id,
+            ["input_modalities", "tool_calls", "retention_policy"],
+        )
+
+    def get_prompt_harness(self, prompt_id: str, semantic_version: str, prompt_hash: str) -> JsonDict | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM prompt_harnesses
+            WHERE prompt_id = ? AND semantic_version = ? AND prompt_hash = ? AND deleted_at IS NULL
+            """,
+            (prompt_id, semantic_version, prompt_hash),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        record["active"] = bool(record["active"])
+        return _decode_json_fields(record, ["model_compatibility", "output_schema", "retention_policy"])
+
+    def get_conversation(self, organization_id: str, conversation_id: str) -> JsonDict | None:
+        return self._get_tenant_row("conversations", organization_id, conversation_id, ["retention_policy"])
+
+    def list_conversations(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM conversations
+            WHERE organization_id = ? AND workspace_id = ? AND deleted_at IS NULL
+            ORDER BY COALESCE(last_message_at, created_at) DESC, id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["retention_policy"]) for row in rows]
+
+    def list_messages(self, organization_id: str, conversation_id: str) -> list[JsonDict]:
+        self._require_conversation(organization_id, conversation_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM messages
+            WHERE organization_id = ? AND conversation_id = ? AND deleted_at IS NULL
+            ORDER BY created_at, id
+            """,
+            (organization_id, conversation_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(dict(row), ["source_record_ids", "metadata", "retention_policy"])
+            for row in rows
+        ]
+
     def guidance_plan_evidence_links(self, organization_id: str, guidance_plan_id: str) -> list[JsonDict]:
         rows = self.connection.execute(
             """
@@ -675,6 +783,8 @@ class GaiaRepository:
             "movement_checks",
             "season_plans",
             "calendar_bindings",
+            "conversations",
+            "messages",
         }
         if table not in allowed_tables:
             raise ValueError(f"Soft delete not supported for {table}")
@@ -762,6 +872,10 @@ class GaiaRepository:
         if self.get_guidance_plan(organization_id, guidance_plan_id) is None:
             raise TenantAccessError("GuidancePlan is missing or inaccessible")
 
+    def _require_conversation(self, organization_id: str, conversation_id: str) -> None:
+        if self.get_conversation(organization_id, conversation_id) is None:
+            raise TenantAccessError("Conversation is missing or inaccessible")
+
     def _require_action(self, organization_id: str, action_id: str) -> None:
         if self.get_action(organization_id, action_id) is None:
             raise TenantAccessError("Action is missing or inaccessible")
@@ -776,10 +890,5 @@ class GaiaRepository:
             raise TenantAccessError("EvidenceClaim is missing or inaccessible")
 
     def _require_model_run(self, organization_id: str, model_run_id: str) -> None:
-        if self._get_tenant_row(
-            "model_runs",
-            organization_id,
-            model_run_id,
-            ["input_modalities", "tool_calls", "retention_policy"],
-        ) is None:
+        if self.get_model_run(organization_id, model_run_id) is None:
             raise TenantAccessError("ModelRun is missing or inaccessible")
