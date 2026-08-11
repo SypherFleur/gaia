@@ -27,11 +27,17 @@ from packages.domain import (
     PlantProfile,
     PromptHarness,
     RegulationRule,
+    ResearchAnnotation,
+    ResearchAuthor,
+    ResearchClaim,
+    ResearchCollection,
+    ResearchWork,
     SeasonPlan,
     User,
     UserPlant,
     VisualAnalysis,
     Workspace,
+    EvidenceSynthesis,
     SourceRecord,
 )
 from packages.domain.models import now_iso
@@ -408,6 +414,95 @@ class GaiaRepository:
         values["retention_policy"] = _json(values["retention_policy"])
         self._insert_from_dict("source_records", values)
         return source_record
+
+    def create_research_author(self, author: ResearchAuthor) -> ResearchAuthor:
+        values = asdict(author)
+        for key in ["source_record_ids", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_authors", values)
+        return author
+
+    def upsert_research_work(self, work: ResearchWork) -> ResearchWork:
+        existing = self.find_research_work(doi=work.doi, pmid=work.pmid, pmcid=work.pmcid, provider_ids=work.provider_ids)
+        if existing is not None:
+            return ResearchWork(
+                id=existing["id"],
+                title=existing["title"],
+                abstract=existing.get("abstract"),
+                publication_year=existing.get("publication_year"),
+                journal=existing.get("journal"),
+                doi=existing.get("doi"),
+                pmid=existing.get("pmid"),
+                pmcid=existing.get("pmcid"),
+                provider_ids=existing.get("provider_ids", {}),
+                publication_types=existing.get("publication_types", []),
+                open_access_status=existing.get("open_access_status", "unknown"),
+                retracted_status=existing.get("retracted_status", "unknown"),
+                study_type=existing.get("study_type", "unknown"),
+                authors=existing.get("authors", []),
+                evidence_policy=existing.get("evidence_policy", {}),
+                source_record_ids=existing.get("source_record_ids", []),
+                retention_policy=existing.get("retention_policy", {}),
+                created_at=existing["created_at"],
+                updated_at=existing["updated_at"],
+                deleted_at=existing.get("deleted_at"),
+            )
+        values = asdict(work)
+        for key in ["provider_ids", "publication_types", "authors", "evidence_policy", "source_record_ids", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_works", values)
+        return work
+
+    def create_research_claim(self, claim: ResearchClaim) -> ResearchClaim:
+        self._require_organization(claim.organization_id)
+        values = asdict(claim)
+        for key in ["source_work_ids", "source_record_ids", "limitations", "applicability", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_claims", values)
+        return claim
+
+    def create_evidence_synthesis(self, synthesis: EvidenceSynthesis) -> EvidenceSynthesis:
+        self._require_workspace(synthesis.organization_id, synthesis.workspace_id)
+        for model_run_id in synthesis.model_run_ids:
+            self._require_model_run(synthesis.organization_id, model_run_id)
+        values = asdict(synthesis)
+        for key in [
+            "scope",
+            "supporting_claims",
+            "contradictory_claims",
+            "uncertain_claims",
+            "uncertainty",
+            "applicability",
+            "source_work_ids",
+            "source_record_ids",
+            "model_run_ids",
+            "export_payload",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("evidence_syntheses", values)
+        return synthesis
+
+    def create_research_collection(self, collection: ResearchCollection) -> ResearchCollection:
+        self._require_workspace(collection.organization_id, collection.workspace_id)
+        values = asdict(collection)
+        for key in ["work_ids", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_collections", values)
+        return collection
+
+    def create_research_annotation(self, annotation: ResearchAnnotation) -> ResearchAnnotation:
+        self._require_workspace(annotation.organization_id, annotation.workspace_id)
+        if annotation.collection_id is not None:
+            self._require_research_collection(annotation.organization_id, annotation.collection_id)
+        self._require_research_work(annotation.work_id)
+        self._require_membership(annotation.organization_id, annotation.author_id)
+        values = asdict(annotation)
+        values["private"] = 1 if annotation.private else 0
+        for key in ["tags", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_annotations", values)
+        return annotation
 
     def create_evidence_claim(self, evidence_claim: EvidenceClaim) -> EvidenceClaim:
         self._require_organization(evidence_claim.organization_id)
@@ -800,6 +895,100 @@ class GaiaRepository:
             for row in rows
         ]
 
+    def get_research_work(self, work_id: str) -> JsonDict | None:
+        row = self.connection.execute(
+            "SELECT * FROM research_works WHERE id = ? AND deleted_at IS NULL",
+            (work_id,),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(
+            record,
+            ["provider_ids", "publication_types", "authors", "evidence_policy", "source_record_ids", "retention_policy"],
+        )
+
+    def find_research_work(
+        self,
+        *,
+        doi: str | None = None,
+        pmid: str | None = None,
+        pmcid: str | None = None,
+        provider_ids: JsonDict | None = None,
+    ) -> JsonDict | None:
+        for column, value in [("doi", doi), ("pmid", pmid), ("pmcid", pmcid)]:
+            if value:
+                row = self.connection.execute(
+                    f"SELECT * FROM research_works WHERE {column} = ? AND deleted_at IS NULL LIMIT 1",
+                    (value,),
+                ).fetchone()
+                record = _row_to_dict(row)
+                if record is not None:
+                    return _decode_json_fields(
+                        record,
+                        ["provider_ids", "publication_types", "authors", "evidence_policy", "source_record_ids", "retention_policy"],
+                    )
+        for provider, external_id in (provider_ids or {}).items():
+            if not external_id:
+                continue
+            rows = self.connection.execute("SELECT * FROM research_works WHERE deleted_at IS NULL").fetchall()
+            for row in rows:
+                record = _decode_json_fields(
+                    dict(row),
+                    ["provider_ids", "publication_types", "authors", "evidence_policy", "source_record_ids", "retention_policy"],
+                )
+                if record.get("provider_ids", {}).get(provider) == external_id:
+                    return record
+        return None
+
+    def list_research_works(self, work_ids: list[str]) -> list[JsonDict]:
+        works = []
+        for work_id in work_ids:
+            work = self.get_research_work(work_id)
+            if work is not None:
+                works.append(work)
+        return works
+
+    def get_evidence_synthesis(self, organization_id: str, synthesis_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "evidence_syntheses",
+            organization_id,
+            synthesis_id,
+            [
+                "scope",
+                "supporting_claims",
+                "contradictory_claims",
+                "uncertain_claims",
+                "uncertainty",
+                "applicability",
+                "source_work_ids",
+                "source_record_ids",
+                "model_run_ids",
+                "export_payload",
+                "retention_policy",
+            ],
+        )
+
+    def get_research_collection(self, organization_id: str, collection_id: str) -> JsonDict | None:
+        return self._get_tenant_row("research_collections", organization_id, collection_id, ["work_ids", "retention_policy"])
+
+    def list_research_annotations(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM research_annotations
+            WHERE organization_id = ? AND workspace_id = ? AND deleted_at IS NULL
+            ORDER BY created_at DESC, id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        records = []
+        for row in rows:
+            record = dict(row)
+            record["private"] = bool(record["private"])
+            records.append(_decode_json_fields(record, ["tags", "retention_policy"]))
+        return records
+
     def get_guidance_plan(self, organization_id: str, guidance_plan_id: str) -> JsonDict | None:
         return self._get_tenant_row(
             "guidance_plans",
@@ -920,6 +1109,10 @@ class GaiaRepository:
             "messages",
             "plant_profiles",
             "visual_analyses",
+            "research_claims",
+            "evidence_syntheses",
+            "research_collections",
+            "research_annotations",
         }
         if table not in allowed_tables:
             raise ValueError(f"Soft delete not supported for {table}")
@@ -1035,3 +1228,11 @@ class GaiaRepository:
     def _require_model_run(self, organization_id: str, model_run_id: str) -> None:
         if self.get_model_run(organization_id, model_run_id) is None:
             raise TenantAccessError("ModelRun is missing or inaccessible")
+
+    def _require_research_work(self, work_id: str) -> None:
+        if self.get_research_work(work_id) is None:
+            raise TenantAccessError("ResearchWork is missing or inaccessible")
+
+    def _require_research_collection(self, organization_id: str, collection_id: str) -> None:
+        if self.get_research_collection(organization_id, collection_id) is None:
+            raise TenantAccessError("ResearchCollection is missing or inaccessible")

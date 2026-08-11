@@ -12,6 +12,21 @@ OrganizationType = Literal["personal", "community", "university", "government", 
 MembershipRole = Literal["owner", "admin", "researcher", "extension_agent", "grower", "viewer"]
 ObservationSource = Literal["user", "sensor", "imported"]
 EvidenceGrade = Literal["A", "B", "C", "D", "E"]
+EvidenceDirection = Literal["supporting", "contradictory", "uncertain", "irrelevant"]
+EvidenceQuality = Literal["strong", "moderate", "limited", "mixed", "insufficient", "unknown"]
+StudyType = Literal[
+    "meta-analysis",
+    "systematic review",
+    "randomized controlled trial",
+    "controlled experiment",
+    "observational study",
+    "field trial",
+    "laboratory study",
+    "review",
+    "case study",
+    "expert opinion",
+    "unknown",
+]
 MovementStatus = Literal["allowed", "conditional", "restricted", "unresolved"]
 MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
@@ -282,6 +297,94 @@ class EvidenceClaim(EntityMetadata):
     source_record_ids: list[str] = field(default_factory=list)
     contradictory_source_ids: list[str] = field(default_factory=list)
     generated_at: str = field(default_factory=now_iso)
+
+
+@dataclass(slots=True)
+class ResearchAuthor(EntityMetadata):
+    display_name: str = ""
+    given_name: str | None = None
+    family_name: str | None = None
+    orcid: str | None = None
+    source_record_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ResearchWork(EntityMetadata):
+    title: str = ""
+    abstract: str | None = None
+    publication_year: int | None = None
+    journal: str | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    provider_ids: JsonDict = field(default_factory=dict)
+    publication_types: list[str] = field(default_factory=list)
+    open_access_status: str = "unknown"
+    retracted_status: str = "unknown"
+    study_type: StudyType | str = "unknown"
+    authors: list[JsonDict] = field(default_factory=list)
+    evidence_policy: JsonDict = field(default_factory=dict)
+    source_record_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ResearchClaim(EntityMetadata):
+    organization_id: str = ""
+    statement: str = ""
+    subject: str = ""
+    evidence_direction: EvidenceDirection | str = "uncertain"
+    evidence_quality: EvidenceQuality | str = "unknown"
+    evidence_grade: EvidenceGrade = "E"
+    model_confidence: str | None = None
+    data_freshness: str = "unknown"
+    source_work_ids: list[str] = field(default_factory=list)
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    study_type: StudyType | str = "unknown"
+    applicability: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EvidenceSynthesis(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    question: str = ""
+    scope: JsonDict = field(default_factory=dict)
+    supporting_claims: list[JsonDict] = field(default_factory=list)
+    contradictory_claims: list[JsonDict] = field(default_factory=list)
+    uncertain_claims: list[JsonDict] = field(default_factory=list)
+    evidence_quality: EvidenceQuality | str = "unknown"
+    model_confidence: str | None = None
+    data_freshness: str = "unknown"
+    uncertainty: JsonDict = field(default_factory=dict)
+    applicability: JsonDict = field(default_factory=dict)
+    source_work_ids: list[str] = field(default_factory=list)
+    source_record_ids: list[str] = field(default_factory=list)
+    model_run_ids: list[str] = field(default_factory=list)
+    provenance_bundle_id: str | None = None
+    export_payload: JsonDict = field(default_factory=dict)
+    generated_at: str = field(default_factory=now_iso)
+
+
+@dataclass(slots=True)
+class ResearchCollection(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    name: str = ""
+    visibility: Literal["private", "institution", "public"] = "private"
+    work_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ResearchAnnotation(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    collection_id: str | None = None
+    work_id: str = ""
+    author_id: str = ""
+    note: str = ""
+    tags: list[str] = field(default_factory=list)
+    private: bool = True
 
 
 @dataclass(slots=True)

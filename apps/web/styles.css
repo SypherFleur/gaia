@@ -211,6 +211,22 @@ pre {
   font-size: 12px;
 }
 
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.source-chips span {
+  border: 1px solid #bdcabe;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1d2a22;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
 @media (max-width: 780px) {
   .shell {
     grid-template-columns: 1fr;

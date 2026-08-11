@@ -19,6 +19,8 @@ const visionDemo = document.querySelector("#vision-demo");
 const visionStatus = document.querySelector("#vision-status");
 const visionProvider = document.querySelector("#vision-provider");
 const visionOutput = document.querySelector("#vision-output");
+const evidenceDemo = document.querySelector("#evidence-demo");
+const evidenceOutput = document.querySelector("#evidence-output");
 
 const plants = [
   {
@@ -44,6 +46,36 @@ const plants = [
         },
       ],
       safety_note: "Vision output is visual evidence, not a confirmed diagnosis.",
+    },
+    evidence: {
+      question: "What does research say about calcium sprays for blossom-end rot?",
+      evidence_quality: "mixed",
+      source_cards: [
+        {
+          title: "Blossom-end rot of tomato: calcium transport, water stress, and management",
+          authors: "Doe J",
+          journal: "Horticultural Reviews",
+          year: 2019,
+          doi: "10.1000/ber-review",
+          study_type: "review",
+          relevance: "species partial; intervention partial",
+          why_used: "Review evidence reports inconsistent foliar calcium spray benefit.",
+          retrieved_through: "Europe PMC",
+          category: "Peer-reviewed",
+        },
+        {
+          title: "Greenhouse calcium sprays in tomato under controlled humidity",
+          authors: "Green G",
+          journal: "Protected Horticulture",
+          year: 2018,
+          doi: null,
+          study_type: "controlled experiment",
+          relevance: "greenhouse growing-system mismatch",
+          why_used: "Shows context limits for applying controlled greenhouse results outdoors.",
+          retrieved_through: "Europe PMC",
+          category: "Experimental",
+        },
+      ],
     },
   },
 ];
@@ -158,6 +190,16 @@ visionDemo.addEventListener("click", () => {
   modelRuns.textContent = "0";
 });
 
+evidenceDemo.addEventListener("click", () => {
+  const evidence = selectedPlant.evidence || {
+    question: "No research evidence loaded.",
+    evidence_quality: "insufficient",
+    source_cards: [],
+  };
+  evidenceOutput.textContent = JSON.stringify(evidence, null, 2);
+  providers.textContent = JSON.stringify({ scholar: { "europe-pmc": "AVAILABLE" } }, null, 2);
+});
+
 function selectDemoResponse(text) {
   const lower = text.toLowerCase();
   return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
@@ -209,6 +251,7 @@ function selectPlant(plant) {
   visionStatus.textContent = plant.vision?.status || "idle";
   visionProvider.textContent = plant.vision?.provider || "none";
   visionOutput.textContent = JSON.stringify(plant.vision || {}, null, 2);
+  evidenceOutput.textContent = JSON.stringify(plant.evidence || {}, null, 2);
 }
 
 renderPlants();

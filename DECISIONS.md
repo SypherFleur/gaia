@@ -381,3 +381,35 @@ Pl@ntNet is represented as a vision provider boundary with fixtures. A Pl@ntNet 
 ## D095. Private Images Are Egress-Protected
 
 Image analysis requests mark image bytes as private by default. Remote vision providers must be denied when deployment or tenant policy forbids private-image egress, regardless of whether the provider is free.
+
+## D096. Scholar Provider Boundary Is Mandatory
+
+GAIA Scholar uses provider-neutral research request/response/document contracts. Core domain, synthesis, and API objects must not depend directly on Europe PMC response structures.
+
+## D097. Europe PMC Is First Research Adapter
+
+Europe PMC is the first live-capable research adapter. Automated tests remain fixture-backed, live search is opt-in, and all calls pass through the Tool Gateway, Cost Firewall, quota, cache, provenance, audit, and usage ledger.
+
+## D098. Research Works Are Not Syntheses
+
+`ResearchWork` records provider-backed publication metadata. `EvidenceSynthesis` records GAIA-generated interpretation. A generated synthesis must never be stored or cited as though it were a source document.
+
+## D099. Retrieved Citations Only
+
+Research citations must originate from retrieved work IDs and source records. Model-generated citation names, IDs, DOI, PMID, PMCID, or source IDs are rejected when they are not present in ScholarContext.
+
+## D100. Contradictory Evidence Remains Visible
+
+Scholar separates supporting, contradictory, uncertain, and irrelevant evidence. Mixed literature must not be collapsed into a definitive yes/no recommendation.
+
+## D101. Research Applicability Is Contextual
+
+Study applicability tracks species, cultivar, growing system, climate, geography, soil, development stage, and intervention match. A valid greenhouse or laboratory study is not automatically universal outdoor guidance.
+
+## D102. Research Rights Are Conservative
+
+Metadata and abstracts may be cached only according to source policy. Full text, redistribution, embedding, and training rights default to `unknown` unless explicitly reviewed.
+
+## D103. Research Annotations Are Tenant-Scoped
+
+Public research metadata may be shared safely, but institutional/private collections and annotations are scoped to organization and workspace and cannot cross tenants.

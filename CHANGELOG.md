@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added Phase 7 Scholar research provider boundary, Europe PMC live-capable adapter, fixture research provider, research Tool Gateway wrappers, ScholarService, citation validation, deterministic query planning, evidence synthesis prompt harness, and research API helpers.
+- Added migration `0007_scholar_research_evidence.sql` for research works, authors, claims, evidence syntheses, collections, and private annotations.
+- Added Phase 7 tests covering normalized retrieval, deduplication, missing DOI identity, fetch provenance, provider outages, contradictions, study types, retractions, applicability mismatch, citation validation, tenancy, retrieved-content injection boundaries, cost/cache behavior, no-result honesty, Botanist/Vision integration, and optional Europe PMC smoke.
 - Added Phase 6 Vision provider boundary, fixture vision provider, local Ollama LLaVA adapter, Pl@ntNet adapter boundary, Vision Tool Gateway wrappers, VisionService, visual-analysis API helpers, and development UI diagnostics.
 - Added migration `0006_vision_multimodal_perception.sql` for persisted visual analyses linked to tenant, workspace, media, plant, geo, environment, and model-run records.
 - Added Phase 6 tests covering provider capabilities, visual observation/hypothesis separation, diagnosis overclaim rejection, tenant/media isolation, Tool Gateway/Cost Firewall use, private-image egress denial, cache behavior, Pl@ntNet optionality, provider failure semantics, and optional local LLaVA smoke.

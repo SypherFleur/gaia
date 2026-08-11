@@ -43,6 +43,12 @@ class MigrationSchemaTest(unittest.TestCase):
             "conversations",
             "messages",
             "plant_profiles",
+            "research_authors",
+            "research_works",
+            "research_claims",
+            "evidence_syntheses",
+            "research_collections",
+            "research_annotations",
         }
 
         rows = connection.execute(

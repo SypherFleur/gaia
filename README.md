@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 6: Vision and Multimodal Plant Perception.
+Phase 7: Scholar Research and Evidence Intelligence.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -114,4 +114,22 @@ Optional local LLaVA smoke:
 $env:GAIA_RUN_LLAVA_SMOKE='1'
 $env:GAIA_LLAVA_MODEL='llava:latest'
 py -3.13 -m unittest tests.phase6.test_llava_vision_smoke
+```
+
+## Phase 7 Scholar Research And Evidence Intelligence
+
+Scholar adds query-driven research retrieval and evidence synthesis:
+
+- `ResearchProvider`, `ResearchSearchRequest`, `ResearchSearchResponse`, `ResearchFetchRequest`, and `ResearchDocument` isolate GAIA from Europe PMC-specific shapes.
+- Europe PMC is the first live-capable research adapter and is fixture-tested by default.
+- `ResearchWork`, `ResearchClaim`, `EvidenceSynthesis`, research collections, and annotations preserve publication identity, evidence direction, study type, applicability, provenance, and tenant boundaries.
+- Model-generated citations are rejected unless they match retrieved work IDs.
+- Retrieved abstracts and paper text are untrusted data and cannot change system, tool, privacy, citation, or cost policy.
+- Contradictory research remains visible; Scholar does not flatten mixed evidence into false certainty.
+
+Optional Europe PMC smoke:
+
+```powershell
+$env:GAIA_RUN_RESEARCH_SMOKE='1'
+py -3.13 -m unittest tests.phase7.test_europe_pmc_smoke
 ```
