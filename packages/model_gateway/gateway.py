@@ -90,9 +90,16 @@ class ModelGateway:
         if provider.provider_type.value != "MODEL":
             return "provider_is_not_model"
         if provider.remote:
+            policy_denial = self._organization_model_policy_denial(context.organization_id, provider_id, request, provider.remote)
+            if policy_denial is not None:
+                return policy_denial
             egress_denial = self._egress_denial(context.data_egress_policy, request)
             if egress_denial is not None:
                 return egress_denial
+        else:
+            policy_denial = self._organization_model_policy_denial(context.organization_id, provider_id, request, provider.remote)
+            if policy_denial is not None:
+                return policy_denial
         decision = self.cost_firewall.check(provider, request.estimated_cost_usd)
         if not decision.allowed:
             return decision.reason
@@ -103,6 +110,8 @@ class ModelGateway:
         return None
 
     def _egress_denial(self, policy: DataEgressPolicy, request: ModelRequest) -> str | None:
+        if not policy.allow_external_model_egress:
+            return "external_model_egress_denied"
         if request.contains_private_text and not policy.allow_private_text_egress:
             return "private_text_egress_denied"
         if request.contains_private_image and not policy.allow_private_image_egress:
@@ -112,6 +121,59 @@ class ModelGateway:
         if request.contains_exact_location and not policy.allow_exact_location_egress:
             return "exact_location_egress_denied"
         return None
+
+    def _organization_model_policy_denial(
+        self,
+        organization_id: str,
+        provider_id: str,
+        request: ModelRequest,
+        provider_is_remote: bool,
+    ) -> str | None:
+        policy = self._organization_policy(organization_id)
+        if policy is None:
+            return None
+        model_policy = policy.get("model_policy", {})
+        egress_policy = policy.get("egress_policy", {})
+        allowed_providers = model_policy.get("allowed_model_providers") or model_policy.get("allowed_provider_ids")
+        if allowed_providers is not None and provider_id not in allowed_providers:
+            return "organization_model_provider_not_allowed"
+        allowed_models = model_policy.get("allowed_models")
+        requested_model = request.metadata.get("model") if hasattr(request, "metadata") else None
+        if allowed_models is not None and requested_model and requested_model not in allowed_models:
+            return "organization_model_not_allowed"
+        if provider_is_remote and model_policy.get("remote_models_allowed") is False:
+            return "organization_remote_models_denied"
+        if provider_is_remote and model_policy.get("local_models_required") is True:
+            return "organization_local_models_required"
+        if provider_is_remote and egress_policy.get("allow_external_model_egress") is False:
+            return "organization_external_model_egress_denied"
+        if request.contains_private_text and egress_policy.get("allow_private_text_egress") is False:
+            return "organization_private_text_egress_denied"
+        if request.contains_private_image and egress_policy.get("allow_private_image_egress") is False:
+            return "organization_private_image_egress_denied"
+        if request.contains_private_document and egress_policy.get("allow_private_document_egress") is False:
+            return "organization_private_document_egress_denied"
+        return None
+
+    def _organization_policy(self, organization_id: str) -> JsonDict | None:
+        try:
+            row = self.connection.execute(
+                """
+                SELECT model_policy, egress_policy
+                FROM organization_policies
+                WHERE organization_id = ? AND deleted_at IS NULL
+                LIMIT 1
+                """,
+                (organization_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        return {
+            "model_policy": json.loads(row["model_policy"]),
+            "egress_policy": json.loads(row["egress_policy"]),
+        }
 
     def _persist_and_record(
         self,

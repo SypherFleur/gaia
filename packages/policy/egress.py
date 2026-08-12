@@ -10,6 +10,8 @@ class DataEgressPolicy:
     allow_private_image_egress: bool = True
     allow_private_document_egress: bool = True
     allow_exact_location_egress: bool = True
+    allow_research_data_egress: bool = True
+    allow_external_model_egress: bool = True
 
     @classmethod
     def sovereign_default(cls) -> "DataEgressPolicy":
@@ -19,5 +21,6 @@ class DataEgressPolicy:
             allow_private_image_egress=False,
             allow_private_document_egress=False,
             allow_exact_location_egress=False,
+            allow_research_data_egress=False,
+            allow_external_model_egress=False,
         )
-

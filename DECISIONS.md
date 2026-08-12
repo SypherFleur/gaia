@@ -501,3 +501,43 @@ Future model synthesis may explain trusted Mercator context, but model-created p
 ## D125. Commercial Market Data Is Out Of Scope For Phase 10
 
 No commercial market-data subscriptions, paid providers, automatic paid fallback, purchasing workflow, or overage path may execute in Phase 10.
+
+## D126. Institution, Public, And Sovereign Share One Core
+
+GAIA Public, GAIA Institution, and GAIA Sovereign remain deployment profiles of the same platform. Deployment mode, organization policy, provider configuration, and permissions create the trust profile.
+
+## D127. ResearchRuns Preserve Historical Inputs And Versions
+
+ResearchRuns must retain exact model runs, prompt hashes, dataset-version IDs, evidence IDs, source records, and output hashes. Later prompt or dataset updates cannot mutate historical run provenance.
+
+## D128. Reproducibility Bundles Exclude Hidden Chain-Of-Thought
+
+Bundles include reproducible inputs, tool evidence, versions, hashes, model/prompt records, and outputs. They do not include hidden chain-of-thought.
+
+## D129. Institutional Data Is Private Until Classified Otherwise
+
+Datasets, private knowledge collections, project notes, reviews, and annotations are tenant scoped by default. Public source records may be deduplicated, but private institutional layers cannot cross tenants.
+
+## D130. Organization Policy Is Central
+
+Model policy, provider policy, egress, telemetry, export, retention, and data sharing are evaluated through OrganizationPolicy rather than scattered feature-specific switches.
+
+## D131. Sovereign Defaults Disable Private Egress And Telemetry
+
+Sovereign organizations default private text/image/document, exact-location, research-data, external-model egress, and telemetry to disabled. Core local/fixture workflows must still boot.
+
+## D132. Uploaded Documents Are Untrusted
+
+Institutional documents may be ingested for local retrieval, but their content cannot alter system policy, invoke tools, enable providers, reveal secrets, or bypass the Cost Firewall.
+
+## D133. Reviews Do Not Rewrite Outputs
+
+Human reviews are separate records. Approval, rejection, or revision requests preserve the original ResearchRun and output bundle.
+
+## D134. Export Integrity Uses Hashes, Not Signing
+
+Phase 11 exports include SHA-256 hashes and checksum manifests. GAIA must not call this cryptographic signing until an actual signing system exists.
+
+## D135. Compliance Support Is Architectural Only
+
+GAIA may document controls intended to support future compliance work, but it must not claim FedRAMP, HIPAA, FERPA, SOC 2, ISO 27001, or similar certification.

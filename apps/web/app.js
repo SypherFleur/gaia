@@ -35,6 +35,12 @@ const mercatorDemo = document.querySelector("#mercator-demo");
 const mercatorFreshness = document.querySelector("#mercator-freshness");
 const mercatorDate = document.querySelector("#mercator-date");
 const mercatorOutput = document.querySelector("#mercator-output");
+const researchRunDemo = document.querySelector("#research-run-demo");
+const reviewDemo = document.querySelector("#review-demo");
+const exportDemo = document.querySelector("#export-demo");
+const researchStatus = document.querySelector("#research-status");
+const researchPolicy = document.querySelector("#research-policy");
+const institutionOutput = document.querySelector("#institution-output");
 
 const plants = [
   {
@@ -148,6 +154,31 @@ const plants = [
         },
       ],
       source_count: 2,
+    },
+    institution: {
+      organization: "FAMU Research Lab fixture",
+      policy: {
+        deployment_mode: "institution",
+        telemetry_policy: "LOCAL_ONLY",
+        remote_models_allowed: false,
+        private_document_egress: false,
+      },
+      projects: [
+        {
+          title: "Tomato irrigation trial",
+          status: "ACTIVE",
+          research_question: "Does deficit irrigation improve tomato water use efficiency?",
+        },
+      ],
+      run: {
+        status: "COMPLETED",
+        model_versions: [{ provider: "ollama-local", model: "llama3.1:latest", model_version: "3.1" }],
+        prompt_versions: [{ prompt_id: "gaia.test", prompt_version: "0.1.0", prompt_hash: "hash-v1" }],
+        source_records: [{ provider: "fixture", source_type: "research", content_hash: "source-hash" }],
+        output_hashes: { output_bundle_id: "sha256-fixture" },
+      },
+      review: { status: "UNREVIEWED", reviewer: null },
+      export: { manifest: "gaia-research-export", checksums: true, contains_secrets: false },
     },
   },
 ];
@@ -326,6 +357,25 @@ mercatorDemo.addEventListener("click", () => {
   providers.textContent = JSON.stringify({ mercator: { "usda-nass": "AVAILABLE", "usda-ams": "AVAILABLE" } }, null, 2);
 });
 
+researchRunDemo.addEventListener("click", () => {
+  renderInstitution(selectedPlant.institution);
+  route.textContent = "research";
+  modelRuns.textContent = "1";
+  sources.textContent = String(selectedPlant.institution?.run?.source_records?.length || 0);
+});
+
+reviewDemo.addEventListener("click", () => {
+  const state = selectedPlant.institution || {};
+  state.review = { status: "APPROVED", reviewer: "fixture reviewer", body: "Reviewed separately from original output." };
+  selectedPlant.institution = state;
+  renderInstitution(state);
+});
+
+exportDemo.addEventListener("click", () => {
+  const state = selectedPlant.institution || {};
+  institutionOutput.textContent = JSON.stringify({ export: state.export, run: state.run }, null, 2);
+});
+
 function selectDemoResponse(text) {
   const lower = text.toLowerCase();
   return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
@@ -409,6 +459,7 @@ function selectPlant(plant) {
   sentinelOutput.textContent = JSON.stringify(plant.sentinel || {}, null, 2);
   renderSeason(plant.season);
   renderMercator(plant.mercator);
+  renderInstitution(plant.institution);
 }
 
 function renderSeason(plan) {
@@ -430,6 +481,13 @@ function renderMercator(context) {
   mercatorFreshness.textContent = report.freshness || "unavailable";
   mercatorDate.textContent = report.report_date ? `report date: ${report.report_date}` : "no report date";
   mercatorOutput.textContent = JSON.stringify(safeContext, null, 2);
+}
+
+function renderInstitution(context) {
+  const safeContext = context || { policy: {}, projects: [], run: {}, review: {} };
+  researchStatus.textContent = safeContext.run?.status || "idle";
+  researchPolicy.textContent = `policy: ${safeContext.policy?.deployment_mode || "local"}`;
+  institutionOutput.textContent = JSON.stringify(safeContext, null, 2);
 }
 
 renderPlants();

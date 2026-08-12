@@ -8,14 +8,24 @@ from typing import Any, Iterable
 
 from packages.domain import (
     Action,
+    AuditExport,
     CalendarBinding,
     CalendarEventBinding,
     CalendarPreview,
     Conversation,
+    Dataset,
+    DatasetVersion,
+    EvaluationCase,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationSuite,
     EnvironmentalSnapshot,
     EvidenceClaim,
     GeoContext,
     GuidancePlan,
+    HumanReview,
+    KnowledgeCollection,
+    KnowledgeDocument,
     Location,
     MediaAttachment,
     MercatorContext,
@@ -27,6 +37,7 @@ from packages.domain import (
     MovementRequest,
     Observation,
     Organization,
+    OrganizationPolicy,
     Outcome,
     PlantEntity,
     PlantProfile,
@@ -36,6 +47,10 @@ from packages.domain import (
     ResearchAuthor,
     ResearchClaim,
     ResearchCollection,
+    ResearchProject,
+    ResearchRun,
+    ReproducibilityBundle,
+    ModelComparison,
     ResearchWork,
     SeasonPlan,
     SeasonPlanRevision,
@@ -676,6 +691,211 @@ class GaiaRepository:
         self._insert_from_dict("movement_decisions", values)
         return movement_decision
 
+    def upsert_organization_policy(self, policy: OrganizationPolicy) -> OrganizationPolicy:
+        self._require_organization(policy.organization_id)
+        values = asdict(policy)
+        for key in [
+            "model_policy",
+            "tool_policy",
+            "egress_policy",
+            "export_policy",
+            "data_sharing_policy",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        existing = self.get_organization_policy(policy.organization_id)
+        if existing is None:
+            self._insert_from_dict("organization_policies", values)
+        else:
+            self.connection.execute(
+                """
+                UPDATE organization_policies
+                SET deployment_mode = ?, location_precision_default = ?, telemetry_policy = ?,
+                    model_policy = ?, tool_policy = ?, egress_policy = ?, export_policy = ?,
+                    data_sharing_policy = ?, retention_policy = ?, updated_at = ?
+                WHERE organization_id = ? AND deleted_at IS NULL
+                """,
+                (
+                    policy.deployment_mode,
+                    policy.location_precision_default,
+                    policy.telemetry_policy,
+                    values["model_policy"],
+                    values["tool_policy"],
+                    values["egress_policy"],
+                    values["export_policy"],
+                    values["data_sharing_policy"],
+                    values["retention_policy"],
+                    now_iso(),
+                    policy.organization_id,
+                ),
+            )
+            self.connection.commit()
+        return policy
+
+    def create_research_project(self, project: ResearchProject) -> ResearchProject:
+        self._require_workspace(project.organization_id, project.workspace_id)
+        values = asdict(project)
+        for key in ["collaborators", "tags", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_projects", values)
+        return project
+
+    def create_research_run(self, run: ResearchRun) -> ResearchRun:
+        self._require_research_project(run.organization_id, run.research_project_id)
+        self._require_membership(run.organization_id, run.initiated_by)
+        values = asdict(run)
+        for key in [
+            "model_run_ids",
+            "tool_run_ids",
+            "evidence_synthesis_ids",
+            "guidance_plan_ids",
+            "dataset_version_ids",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("research_runs", values)
+        return run
+
+    def update_research_run_status(
+        self,
+        organization_id: str,
+        run_id: str,
+        status: str,
+        *,
+        completed_at: str | None = None,
+        output_bundle_id: str | None = None,
+    ) -> bool:
+        self._require_research_run(organization_id, run_id)
+        result = self.connection.execute(
+            """
+            UPDATE research_runs
+            SET status = ?, completed_at = COALESCE(?, completed_at),
+                output_bundle_id = COALESCE(?, output_bundle_id), updated_at = ?
+            WHERE organization_id = ? AND id = ? AND deleted_at IS NULL
+            """,
+            (status, completed_at, output_bundle_id, now_iso(), organization_id, run_id),
+        )
+        self.connection.commit()
+        return result.rowcount == 1
+
+    def create_reproducibility_bundle(self, bundle: ReproducibilityBundle) -> ReproducibilityBundle:
+        self._require_research_run(bundle.organization_id, bundle.research_run_id)
+        values = asdict(bundle)
+        for key in [
+            "source_records",
+            "provider_versions",
+            "context_snapshot",
+            "input_hashes",
+            "model_versions",
+            "prompt_versions",
+            "tool_versions",
+            "calculation_versions",
+            "evidence_records",
+            "output_hashes",
+            "environment_metadata",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("reproducibility_bundles", values)
+        return bundle
+
+    def create_model_comparison(self, comparison: ModelComparison) -> ModelComparison:
+        self._require_workspace(comparison.organization_id, comparison.workspace_id)
+        values = asdict(comparison)
+        for key in ["input_bundle", "candidate_runs", "evaluation_results", "summary", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("model_comparisons", values)
+        return comparison
+
+    def create_evaluation_suite(self, suite: EvaluationSuite) -> EvaluationSuite:
+        self._require_workspace(suite.organization_id, suite.workspace_id)
+        values = asdict(suite)
+        for key in ["cases", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("evaluation_suites", values)
+        return suite
+
+    def create_evaluation_case(self, case: EvaluationCase) -> EvaluationCase:
+        self._require_workspace(case.organization_id, case.workspace_id)
+        values = asdict(case)
+        for key in ["pass_fail_criteria", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("evaluation_cases", values)
+        return case
+
+    def create_evaluation_run(self, evaluation_run: EvaluationRun) -> EvaluationRun:
+        self._require_workspace(evaluation_run.organization_id, evaluation_run.workspace_id)
+        values = asdict(evaluation_run)
+        for key in ["provider_configuration", "metrics", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("evaluation_runs", values)
+        return evaluation_run
+
+    def create_evaluation_result(self, result: EvaluationResult) -> EvaluationResult:
+        self._require_workspace(result.organization_id, result.workspace_id)
+        values = asdict(result)
+        values["passed"] = 1 if result.passed else 0
+        for key in ["metrics", "human_rating", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("evaluation_results", values)
+        return result
+
+    def create_human_review(self, review: HumanReview) -> HumanReview:
+        self._require_workspace(review.organization_id, review.workspace_id)
+        self._require_membership(review.organization_id, review.reviewer_id)
+        values = asdict(review)
+        for key in ["ratings", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("human_reviews", values)
+        return review
+
+    def create_dataset(self, dataset: Dataset) -> Dataset:
+        self._require_organization(dataset.organization_id)
+        if dataset.workspace_id is not None:
+            self._require_workspace(dataset.organization_id, dataset.workspace_id)
+        values = asdict(dataset)
+        values["retention_policy"] = _json(values["retention_policy"])
+        self._insert_from_dict("datasets", values)
+        return dataset
+
+    def create_dataset_version(self, version: DatasetVersion) -> DatasetVersion:
+        self._require_dataset(version.organization_id, version.dataset_id)
+        self._require_membership(version.organization_id, version.created_by)
+        values = asdict(version)
+        for key in ["source_provenance", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("dataset_versions", values)
+        return version
+
+    def create_knowledge_collection(self, collection: KnowledgeCollection) -> KnowledgeCollection:
+        self._require_organization(collection.organization_id)
+        if collection.workspace_id is not None:
+            self._require_workspace(collection.organization_id, collection.workspace_id)
+        if collection.research_project_id is not None:
+            self._require_research_project(collection.organization_id, collection.research_project_id)
+        values = asdict(collection)
+        for key in ["embedding_policy", "egress_policy", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("knowledge_collections", values)
+        return collection
+
+    def create_knowledge_document(self, document: KnowledgeDocument) -> KnowledgeDocument:
+        self._require_knowledge_collection(document.organization_id, document.collection_id)
+        values = asdict(document)
+        values["untrusted_content"] = 1 if document.untrusted_content else 0
+        for key in ["chunks", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("knowledge_documents", values)
+        return document
+
+    def create_audit_export(self, audit_export: AuditExport) -> AuditExport:
+        self._require_membership(audit_export.organization_id, audit_export.generated_by)
+        values = asdict(audit_export)
+        for key in ["date_range", "event_classes", "manifest", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("audit_exports", values)
+        return audit_export
+
     def create_mercator_context(self, mercator_context: MercatorContext) -> MercatorContext:
         self._require_workspace(mercator_context.organization_id, mercator_context.workspace_id)
         if mercator_context.location_id is not None:
@@ -918,6 +1138,113 @@ class GaiaRepository:
                 "retention_policy",
             ],
         )
+
+    def get_organization_policy(self, organization_id: str) -> JsonDict | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM organization_policies
+            WHERE organization_id = ? AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (organization_id,),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(record, ["model_policy", "tool_policy", "egress_policy", "export_policy", "data_sharing_policy", "retention_policy"])
+
+    def get_research_project(self, organization_id: str, project_id: str) -> JsonDict | None:
+        return self._get_tenant_row("research_projects", organization_id, project_id, ["collaborators", "tags", "retention_policy"])
+
+    def list_research_projects(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM research_projects
+            WHERE organization_id = ? AND workspace_id = ? AND deleted_at IS NULL
+            ORDER BY created_at DESC, id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["collaborators", "tags", "retention_policy"]) for row in rows]
+
+    def get_research_run(self, organization_id: str, run_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "research_runs",
+            organization_id,
+            run_id,
+            ["model_run_ids", "tool_run_ids", "evidence_synthesis_ids", "guidance_plan_ids", "dataset_version_ids", "retention_policy"],
+        )
+
+    def get_reproducibility_bundle(self, organization_id: str, bundle_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "reproducibility_bundles",
+            organization_id,
+            bundle_id,
+            [
+                "source_records",
+                "provider_versions",
+                "context_snapshot",
+                "input_hashes",
+                "model_versions",
+                "prompt_versions",
+                "tool_versions",
+                "calculation_versions",
+                "evidence_records",
+                "output_hashes",
+                "environment_metadata",
+                "retention_policy",
+            ],
+        )
+
+    def get_dataset(self, organization_id: str, dataset_id: str) -> JsonDict | None:
+        return self._get_tenant_row("datasets", organization_id, dataset_id, ["retention_policy"])
+
+    def get_dataset_version(self, organization_id: str, version_id: str) -> JsonDict | None:
+        return self._get_tenant_row("dataset_versions", organization_id, version_id, ["source_provenance", "retention_policy"])
+
+    def list_dataset_versions(self, organization_id: str, dataset_id: str) -> list[JsonDict]:
+        self._require_dataset(organization_id, dataset_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM dataset_versions
+            WHERE organization_id = ? AND dataset_id = ? AND deleted_at IS NULL
+            ORDER BY uploaded_at, id
+            """,
+            (organization_id, dataset_id),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["source_provenance", "retention_policy"]) for row in rows]
+
+    def get_knowledge_collection(self, organization_id: str, collection_id: str) -> JsonDict | None:
+        return self._get_tenant_row("knowledge_collections", organization_id, collection_id, ["embedding_policy", "egress_policy", "retention_policy"])
+
+    def list_knowledge_documents(self, organization_id: str, collection_id: str) -> list[JsonDict]:
+        self._require_knowledge_collection(organization_id, collection_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM knowledge_documents
+            WHERE organization_id = ? AND collection_id = ? AND deleted_at IS NULL
+            ORDER BY created_at, id
+            """,
+            (organization_id, collection_id),
+        ).fetchall()
+        records = []
+        for row in rows:
+            record = _decode_json_fields(dict(row), ["chunks", "retention_policy"])
+            record["untrusted_content"] = bool(record["untrusted_content"])
+            records.append(record)
+        return records
+
+    def list_human_reviews(self, organization_id: str, target_type: str, target_id: str) -> list[JsonDict]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM human_reviews
+            WHERE organization_id = ? AND target_type = ? AND target_id = ? AND deleted_at IS NULL
+            ORDER BY created_at, id
+            """,
+            (organization_id, target_type, target_id),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["ratings", "retention_policy"]) for row in rows]
 
     def get_mercator_context(self, organization_id: str, mercator_context_id: str) -> JsonDict | None:
         return self._get_tenant_row(
@@ -1533,6 +1860,21 @@ class GaiaRepository:
             "evidence_syntheses",
             "research_collections",
             "research_annotations",
+            "research_projects",
+            "research_runs",
+            "reproducibility_bundles",
+            "model_comparisons",
+            "evaluation_suites",
+            "evaluation_cases",
+            "evaluation_runs",
+            "evaluation_results",
+            "human_reviews",
+            "datasets",
+            "dataset_versions",
+            "knowledge_collections",
+            "knowledge_documents",
+            "audit_exports",
+            "mercator_contexts",
         }
         if table not in allowed_tables:
             raise ValueError(f"Soft delete not supported for {table}")
@@ -1676,3 +2018,19 @@ class GaiaRepository:
     def _require_movement_request(self, organization_id: str, movement_request_id: str) -> None:
         if self.get_movement_request(organization_id, movement_request_id) is None:
             raise TenantAccessError("MovementRequest is missing or inaccessible")
+
+    def _require_research_project(self, organization_id: str, project_id: str) -> None:
+        if self.get_research_project(organization_id, project_id) is None:
+            raise TenantAccessError("ResearchProject is missing or inaccessible")
+
+    def _require_research_run(self, organization_id: str, run_id: str) -> None:
+        if self.get_research_run(organization_id, run_id) is None:
+            raise TenantAccessError("ResearchRun is missing or inaccessible")
+
+    def _require_dataset(self, organization_id: str, dataset_id: str) -> None:
+        if self.get_dataset(organization_id, dataset_id) is None:
+            raise TenantAccessError("Dataset is missing or inaccessible")
+
+    def _require_knowledge_collection(self, organization_id: str, collection_id: str) -> None:
+        if self.get_knowledge_collection(organization_id, collection_id) is None:
+            raise TenantAccessError("KnowledgeCollection is missing or inaccessible")

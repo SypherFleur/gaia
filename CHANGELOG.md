@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Phase 11 institutional foundation with research projects/runs, reproducibility bundles, dataset/version registry, knowledge collections, local document ingestion, organization policy, model/tool allowlists, human review, exports, model comparison, evaluation records, and sovereign policy support.
+- Added migration `0011_institutional_research_foundation.sql` for institutional research, datasets, knowledge, review, policy, comparison, evaluation, and audit export persistence.
+- Added Phase 11 tests covering reproducibility, dataset immutability, tenant isolation, knowledge retrieval isolation, injection handling, policy enforcement, export hashes/secrets, model comparison, human review, retention/deletion, and sovereign boot smoke.
+- Added institutional architecture, reproducibility, datasets, organization policy, egress, institution/sovereign deployment, and NIST AI RMF mapping docs.
 - Added Phase 10 Mercator economic intelligence with provider-neutral `EconomicDataProvider`, NASS/AMS fixture/live boundaries, canonical `MercatorContext`, commodity normalization, unit comparability checks, supply-chain semantics, and economics chat routing.
 - Added migration `0010_mercator_economic_intelligence.sql` for tenant-scoped Mercator contexts.
 - Added Phase 10 tests covering NASS/AMS normalization, source dates, missing county data, unit incompatibility, stale/current labels, provider failures, structural supply-chain semantics, Season/Sentinel/Botanist integration, provenance, cost, cache, tenancy, exact-location privacy, and no model-fabricated market numbers.

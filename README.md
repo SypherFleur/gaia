@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 10: Mercator Agricultural Economics, Markets and Supply-Chain Intelligence.
+Phase 11: Institutional Foundation, Research Workspaces, Reproducibility and Sovereign Readiness.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -189,3 +189,18 @@ $env:GAIA_RUN_NASS_SMOKE='1'
 $env:GAIA_NASS_API_KEY='...'
 py -3.13 -m unittest tests.phase10.test_mercator_economic_intelligence
 ```
+
+## Phase 11 Institutional Foundation
+
+Phase 11 adds institution-ready architecture:
+
+- `ResearchProject`, `ResearchRun`, and `ReproducibilityBundle`.
+- Dataset registry with immutable `DatasetVersion` references.
+- Knowledge collections with local-only retrieval and fixture/local embeddings.
+- Organization policy for model/tool allowlists, egress, telemetry, retention, export, and data sharing.
+- Human review that does not overwrite original GAIA output.
+- Research export packages with SHA-256 hashes and secret scrubbing.
+- Model comparison scaffolding without requiring multiple installed models.
+- Sovereign deployment profile support with private egress and telemetry disabled.
+
+GAIA does not claim FedRAMP, HIPAA, FERPA, SOC 2, ISO 27001, or other certification. The architecture includes controls intended to support future compliance work.

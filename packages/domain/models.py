@@ -39,6 +39,13 @@ MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
 ConversationState = Literal["active", "archived"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
+ResearchProjectStatus = Literal["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"]
+ResearchRunStatus = Literal["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "REVIEW_REQUIRED"]
+ReviewStatus = Literal["UNREVIEWED", "REVIEWED", "APPROVED", "REJECTED", "NEEDS_REVISION"]
+DatasetSensitivity = Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+KnowledgeVisibility = Literal["PRIVATE", "PROJECT", "ORGANIZATION", "PUBLIC"]
+RetrievalPolicy = Literal["LOCAL_ONLY", "APPROVED_REMOTE", "PUBLIC_ONLY"]
+TelemetryMode = Literal["MINIMAL", "LOCAL_ONLY", "DISABLED", "CUSTOM"]
 GrowthStage = Literal[
     "seed",
     "germinating",
@@ -503,6 +510,213 @@ class ResearchAnnotation(EntityMetadata):
     note: str = ""
     tags: list[str] = field(default_factory=list)
     private: bool = True
+    target_type: str = "paper"
+    target_id: str | None = None
+    body: str | None = None
+    classification: str | None = None
+    visibility: str = "PRIVATE"
+    timestamp: str = field(default_factory=now_iso)
+
+
+@dataclass(slots=True)
+class OrganizationPolicy(EntityMetadata):
+    organization_id: str = ""
+    deployment_mode: str = "local"
+    location_precision_default: PrivacyPrecision | str = "1km"
+    telemetry_policy: TelemetryMode | str = "MINIMAL"
+    model_policy: JsonDict = field(default_factory=dict)
+    tool_policy: JsonDict = field(default_factory=dict)
+    egress_policy: JsonDict = field(default_factory=dict)
+    export_policy: JsonDict = field(default_factory=dict)
+    data_sharing_policy: JsonDict = field(default_factory=dict)
+    retention_policy: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ResearchProject(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    title: str = ""
+    description: str = ""
+    research_question: str = ""
+    principal_investigator: str | None = None
+    collaborators: list[JsonDict] = field(default_factory=list)
+    status: ResearchProjectStatus | str = "DRAFT"
+    start_date: str | None = None
+    end_date: str | None = None
+    protocol_reference: str | None = None
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ResearchRun(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    research_project_id: str = ""
+    initiated_by: str = ""
+    started_at: str = field(default_factory=now_iso)
+    completed_at: str | None = None
+    query_or_task: str = ""
+    input_bundle_id: str | None = None
+    context_bundle_id: str | None = None
+    model_run_ids: list[str] = field(default_factory=list)
+    tool_run_ids: list[str] = field(default_factory=list)
+    evidence_synthesis_ids: list[str] = field(default_factory=list)
+    guidance_plan_ids: list[str] = field(default_factory=list)
+    dataset_version_ids: list[str] = field(default_factory=list)
+    output_bundle_id: str | None = None
+    status: ResearchRunStatus | str = "PENDING"
+
+
+@dataclass(slots=True)
+class ReproducibilityBundle(EntityMetadata):
+    organization_id: str = ""
+    research_run_id: str = ""
+    source_records: list[JsonDict] = field(default_factory=list)
+    provider_versions: list[JsonDict] = field(default_factory=list)
+    context_snapshot: JsonDict = field(default_factory=dict)
+    input_hashes: JsonDict = field(default_factory=dict)
+    model_versions: list[JsonDict] = field(default_factory=list)
+    prompt_versions: list[JsonDict] = field(default_factory=list)
+    tool_versions: list[JsonDict] = field(default_factory=list)
+    calculation_versions: list[JsonDict] = field(default_factory=list)
+    evidence_records: list[JsonDict] = field(default_factory=list)
+    output_hashes: JsonDict = field(default_factory=dict)
+    environment_metadata: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ModelComparison(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    input_bundle: JsonDict = field(default_factory=dict)
+    candidate_runs: list[JsonDict] = field(default_factory=list)
+    evaluation_results: list[JsonDict] = field(default_factory=list)
+    summary: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EvaluationSuite(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    name: str = ""
+    description: str = ""
+    cases: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class EvaluationCase(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    suite_id: str | None = None
+    prompt: str = ""
+    expected_behavior: str = ""
+    pass_fail_criteria: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EvaluationRun(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    suite_id: str = ""
+    model_version: str | None = None
+    harness_version: str | None = None
+    provider_configuration: JsonDict = field(default_factory=dict)
+    metrics: JsonDict = field(default_factory=dict)
+    status: str = "PENDING"
+
+
+@dataclass(slots=True)
+class EvaluationResult(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    evaluation_run_id: str = ""
+    evaluation_case_id: str = ""
+    metrics: JsonDict = field(default_factory=dict)
+    human_rating: JsonDict = field(default_factory=dict)
+    passed: bool = False
+    notes: str = ""
+
+
+@dataclass(slots=True)
+class HumanReview(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    target_type: str = ""
+    target_id: str = ""
+    reviewer_id: str = ""
+    review_status: ReviewStatus | str = "UNREVIEWED"
+    role: str = "reviewer"
+    ratings: JsonDict = field(default_factory=dict)
+    body: str = ""
+
+
+@dataclass(slots=True)
+class Dataset(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str | None = None
+    name: str = ""
+    description: str = ""
+    owner: str = ""
+    source: str = ""
+    license: str = "unknown"
+    rights_status: str = "unknown"
+    sensitivity: DatasetSensitivity | str = "INTERNAL"
+    schema_reference: str | None = None
+    version: str = "1"
+    content_hash: str = ""
+
+
+@dataclass(slots=True)
+class DatasetVersion(EntityMetadata):
+    organization_id: str = ""
+    dataset_id: str = ""
+    version: str = ""
+    content_hash: str = ""
+    schema_hash: str = ""
+    uploaded_at: str = field(default_factory=now_iso)
+    created_by: str = ""
+    source_provenance: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class KnowledgeCollection(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str | None = None
+    research_project_id: str | None = None
+    name: str = ""
+    description: str = ""
+    visibility: KnowledgeVisibility | str = "PRIVATE"
+    retrieval_policy: RetrievalPolicy | str = "LOCAL_ONLY"
+    embedding_policy: JsonDict = field(default_factory=dict)
+    egress_policy: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class KnowledgeDocument(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str | None = None
+    collection_id: str = ""
+    title: str = ""
+    format: str = "text"
+    body: str = ""
+    chunks: list[JsonDict] = field(default_factory=list)
+    rights_status: str = "unknown"
+    sensitivity: DatasetSensitivity | str = "INTERNAL"
+    source_record_id: str | None = None
+    content_hash: str = ""
+    untrusted_content: bool = True
+
+
+@dataclass(slots=True)
+class AuditExport(EntityMetadata):
+    organization_id: str = ""
+    generated_by: str = ""
+    date_range: JsonDict = field(default_factory=dict)
+    event_classes: list[str] = field(default_factory=list)
+    format: str = "json"
+    content_hash: str = ""
+    manifest: JsonDict = field(default_factory=dict)
 
 
 @dataclass(slots=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field, replace
 from enum import Enum
+import json
 from typing import Any, Protocol
 
 from packages.audit import AuditEvent, AuditLog, UsageEvent, UsageLedger
@@ -137,6 +138,12 @@ class ToolGateway:
                 self._usage(context, tool, provider.provider_id, "denied", request)
                 return ToolResult.denied(egress_denial)
 
+            organization_policy_denial = self._organization_policy_denial(provider.provider_id, context, request, provider.remote)
+            if organization_policy_denial is not None:
+                self._audit(context, tool, "denied", organization_policy_denial, provider.provider_id)
+                self._usage(context, tool, provider.provider_id, "denied", request)
+                return ToolResult.denied(organization_policy_denial)
+
             cost_decision = self.cost_firewall.check(provider, request.estimated_cost_usd)
             if not cost_decision.allowed:
                 self._audit(context, tool, "denied", cost_decision.reason, provider.provider_id)
@@ -244,6 +251,53 @@ class ToolGateway:
         if request.contains_exact_location and not policy.allow_exact_location_egress:
             return "exact_location_egress_denied"
         return None
+
+    def _organization_policy_denial(
+        self,
+        provider_id: str,
+        context: ToolExecutionContext,
+        request: ToolRequest,
+        provider_is_remote: bool,
+    ) -> str | None:
+        policy = self._organization_policy(context.organization_id)
+        if policy is None:
+            return None
+        allowed_providers = policy.get("tool_policy", {}).get("allowed_provider_ids")
+        if allowed_providers is not None and provider_id not in allowed_providers:
+            return "organization_provider_not_allowed"
+        egress = policy.get("egress_policy", {})
+        if request.contains_private_text and egress.get("allow_private_text_egress") is False:
+            return "organization_private_text_egress_denied"
+        if request.contains_private_image and egress.get("allow_private_image_egress") is False:
+            return "organization_private_image_egress_denied"
+        if request.contains_private_document and egress.get("allow_private_document_egress") is False:
+            return "organization_private_document_egress_denied"
+        if request.contains_exact_location and egress.get("allow_exact_location_egress") is False:
+            return "organization_exact_location_egress_denied"
+        if provider_is_remote and egress.get("allow_research_data_egress") is False and request.contains_private_document:
+            return "organization_research_data_egress_denied"
+        return None
+
+    def _organization_policy(self, organization_id: str) -> JsonDict | None:
+        try:
+            row = self.connection.execute(
+                """
+                SELECT model_policy, tool_policy, egress_policy
+                FROM organization_policies
+                WHERE organization_id = ? AND deleted_at IS NULL
+                LIMIT 1
+                """,
+                (organization_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        return {
+            "model_policy": json.loads(row["model_policy"]),
+            "tool_policy": json.loads(row["tool_policy"]),
+            "egress_policy": json.loads(row["egress_policy"]),
+        }
 
     async def _cache_result_if_allowed(self, provider_id: str, request: ToolRequest) -> ToolResult | None:
         if request.cache_key is None:
