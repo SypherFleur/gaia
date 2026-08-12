@@ -31,6 +31,10 @@ MovementStatus = Literal["allowed", "conditional", "restricted", "unresolved"]
 MovementDecisionStatus = Literal["ALLOWED", "CONDITIONAL", "RESTRICTED", "UNRESOLVED"]
 RegulatoryFreshness = Literal["CURRENT", "STALE", "EXPIRED", "UNAVAILABLE", "CONFLICT"]
 PlantPart = Literal["seed", "fruit", "live plant", "cutting", "scion", "root", "soil", "growing medium", "unknown"]
+SeasonPlanStatus = Literal["draft", "active", "superseded", "archived"]
+SeasonConfidence = Literal["HIGH", "MODERATE", "LOW", "PROVISIONAL"]
+ActionStatus = Literal["NOT_STARTED", "DONE", "SKIPPED", "PARTIAL", "FAILED"]
+CalendarBindingStatus = Literal["connected", "disconnected", "expired", "revoked"]
 MediaModality = Literal["image", "audio", "video", "document_image"]
 PrivacyPrecision = Literal["exact", "approximate", "100m", "1km", "county", "district", "custom"]
 ConversationState = Literal["active", "archived"]
@@ -416,16 +420,25 @@ class GuidancePlan(EntityMetadata):
 @dataclass(slots=True)
 class Action(EntityMetadata):
     organization_id: str = ""
-    guidance_plan_id: str = ""
+    guidance_plan_id: str | None = None
+    season_plan_id: str | None = None
+    plant_or_crop_id: str | None = None
     title: str = ""
     instructions: str = ""
+    action_type: str = "custom"
     earliest_at: str | None = None
     preferred_at: str | None = None
     deadline: str | None = None
+    latest_at: str | None = None
+    duration_minutes: int | None = None
+    recurrence: JsonDict = field(default_factory=dict)
     dependencies: list[str] = field(default_factory=list)
     weather_sensitive: bool = False
+    environmental_conditions: list[JsonDict] = field(default_factory=list)
+    regulatory_conditions: list[JsonDict] = field(default_factory=list)
     user_confirmation_required: bool = False
-    completion_status: str = "pending"
+    calendar_binding: JsonDict = field(default_factory=dict)
+    completion_status: ActionStatus | str = "NOT_STARTED"
     completed_at: str | None = None
 
 
@@ -436,6 +449,9 @@ class Outcome(EntityMetadata):
     user_plant_id: str = ""
     observed_at: str = field(default_factory=now_iso)
     result: str = ""
+    planned_at: str | None = None
+    actual_at: str | None = None
+    environment_snapshot_id: str | None = None
     measurements: JsonDict = field(default_factory=dict)
     user_rating: int | None = None
     attachments: list[str] = field(default_factory=list)
@@ -526,15 +542,23 @@ class MovementCheck(EntityMetadata):
 class SeasonPlan(EntityMetadata):
     organization_id: str = ""
     workspace_id: str = ""
+    name: str = ""
     crop_or_plant_ids: list[str] = field(default_factory=list)
     objective: str = ""
     location_id: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
     date_range: JsonDict = field(default_factory=dict)
     tasks: list[JsonDict] = field(default_factory=list)
+    planning_basis: JsonDict = field(default_factory=dict)
     climate_basis: JsonDict = field(default_factory=dict)
     forecast_basis: JsonDict = field(default_factory=dict)
     regulatory_constraints: list[JsonDict] = field(default_factory=list)
     market_context: list[JsonDict] = field(default_factory=list)
+    status: SeasonPlanStatus | str = "draft"
+    confidence: SeasonConfidence | str = "PROVISIONAL"
+    version: int = 1
+    supersedes_plan_id: str | None = None
     generated_at: str = field(default_factory=now_iso)
 
 
@@ -545,7 +569,47 @@ class CalendarBinding(EntityMetadata):
     provider: str = ""
     external_calendar_id: str = ""
     encrypted_credential_reference: str = ""
+    credential_reference: str | None = None
     scopes: list[str] = field(default_factory=list)
+    status: CalendarBindingStatus | str = "connected"
+    revoked_at: str | None = None
+
+
+@dataclass(slots=True)
+class CalendarEventBinding(EntityMetadata):
+    organization_id: str = ""
+    action_id: str = ""
+    calendar_binding_id: str = ""
+    external_event_id: str = ""
+    plan_version: int = 1
+    last_synced_at: str = field(default_factory=now_iso)
+    status: str = "created"
+
+
+@dataclass(slots=True)
+class CalendarPreview(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    season_plan_id: str = ""
+    plan_version: int = 1
+    calendar_binding_id: str = ""
+    event_previews: list[JsonDict] = field(default_factory=list)
+    status: str = "preview"
+    expires_at: str | None = None
+    committed_at: str | None = None
+
+
+@dataclass(slots=True)
+class SeasonPlanRevision(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    previous_plan_id: str = ""
+    revised_plan_id: str | None = None
+    reason: str = ""
+    changed_actions: list[JsonDict] = field(default_factory=list)
+    unchanged_actions: list[JsonDict] = field(default_factory=list)
+    context_change: JsonDict = field(default_factory=dict)
+    generated_at: str = field(default_factory=now_iso)
 
 
 @dataclass(slots=True)

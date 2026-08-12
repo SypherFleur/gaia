@@ -52,6 +52,9 @@ class MigrationSchemaTest(unittest.TestCase):
             "movement_requests",
             "movement_decisions",
             "sentinel_zone_features",
+            "season_plan_revisions",
+            "calendar_previews",
+            "calendar_event_bindings",
         }
 
         rows = connection.execute(

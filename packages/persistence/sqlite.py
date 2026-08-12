@@ -9,6 +9,8 @@ from typing import Any, Iterable
 from packages.domain import (
     Action,
     CalendarBinding,
+    CalendarEventBinding,
+    CalendarPreview,
     Conversation,
     EnvironmentalSnapshot,
     EvidenceClaim,
@@ -35,6 +37,7 @@ from packages.domain import (
     ResearchCollection,
     ResearchWork,
     SeasonPlan,
+    SeasonPlanRevision,
     User,
     UserPlant,
     VisualAnalysis,
@@ -579,9 +582,23 @@ class GaiaRepository:
         return guidance_plan
 
     def create_action(self, action: Action) -> Action:
-        self._require_guidance_plan(action.organization_id, action.guidance_plan_id)
+        if action.guidance_plan_id is None and action.season_plan_id is None:
+            raise TenantAccessError("Action requires a GuidancePlan or SeasonPlan")
+        if action.guidance_plan_id is not None:
+            self._require_guidance_plan(action.organization_id, action.guidance_plan_id)
+        if action.season_plan_id is not None:
+            self._require_season_plan(action.organization_id, action.season_plan_id)
         values = asdict(action)
-        for key in ["dependencies", "retention_policy"]:
+        values["weather_sensitive"] = 1 if action.weather_sensitive else 0
+        values["user_confirmation_required"] = 1 if action.user_confirmation_required else 0
+        for key in [
+            "recurrence",
+            "dependencies",
+            "environmental_conditions",
+            "regulatory_conditions",
+            "calendar_binding",
+            "retention_policy",
+        ]:
             values[key] = _json(values[key])
         self._insert_from_dict("actions", values)
         return action
@@ -589,6 +606,8 @@ class GaiaRepository:
     def create_outcome(self, outcome: Outcome) -> Outcome:
         self._require_action(outcome.organization_id, outcome.action_id)
         self._require_user_plant(outcome.organization_id, outcome.user_plant_id)
+        if outcome.environment_snapshot_id is not None:
+            self._require_environmental_snapshot(outcome.organization_id, outcome.environment_snapshot_id)
         values = asdict(outcome)
         for key in ["measurements", "attachments", "retention_policy"]:
             values[key] = _json(values[key])
@@ -665,6 +684,7 @@ class GaiaRepository:
             "crop_or_plant_ids",
             "date_range",
             "tasks",
+            "planning_basis",
             "climate_basis",
             "forecast_basis",
             "regulatory_constraints",
@@ -675,6 +695,17 @@ class GaiaRepository:
         self._insert_from_dict("season_plans", values)
         return season_plan
 
+    def create_season_plan_revision(self, revision: SeasonPlanRevision) -> SeasonPlanRevision:
+        self._require_workspace(revision.organization_id, revision.workspace_id)
+        self._require_season_plan(revision.organization_id, revision.previous_plan_id)
+        if revision.revised_plan_id is not None:
+            self._require_season_plan(revision.organization_id, revision.revised_plan_id)
+        values = asdict(revision)
+        for key in ["changed_actions", "unchanged_actions", "context_change", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("season_plan_revisions", values)
+        return revision
+
     def create_calendar_binding(self, calendar_binding: CalendarBinding) -> CalendarBinding:
         self._require_membership(calendar_binding.organization_id, calendar_binding.user_id)
         values = asdict(calendar_binding)
@@ -682,6 +713,45 @@ class GaiaRepository:
             values[key] = _json(values[key])
         self._insert_from_dict("calendar_bindings", values)
         return calendar_binding
+
+    def create_calendar_preview(self, preview: CalendarPreview) -> CalendarPreview:
+        self._require_workspace(preview.organization_id, preview.workspace_id)
+        self._require_season_plan(preview.organization_id, preview.season_plan_id)
+        self._require_calendar_binding(preview.organization_id, preview.calendar_binding_id)
+        values = asdict(preview)
+        for key in ["event_previews", "retention_policy"]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("calendar_previews", values)
+        return preview
+
+    def create_calendar_event_binding(self, binding: CalendarEventBinding) -> CalendarEventBinding:
+        self._require_action(binding.organization_id, binding.action_id)
+        self._require_calendar_binding(binding.organization_id, binding.calendar_binding_id)
+        existing = self.find_calendar_event_binding(
+            binding.organization_id,
+            binding.action_id,
+            binding.calendar_binding_id,
+            binding.plan_version,
+        )
+        if existing is not None:
+            return CalendarEventBinding(
+                id=existing["id"],
+                organization_id=existing["organization_id"],
+                action_id=existing["action_id"],
+                calendar_binding_id=existing["calendar_binding_id"],
+                external_event_id=existing["external_event_id"],
+                plan_version=existing["plan_version"],
+                last_synced_at=existing["last_synced_at"],
+                status=existing["status"],
+                retention_policy=existing.get("retention_policy", {}),
+                created_at=existing["created_at"],
+                updated_at=existing["updated_at"],
+                deleted_at=existing.get("deleted_at"),
+            )
+        values = asdict(binding)
+        values["retention_policy"] = _json(values["retention_policy"])
+        self._insert_from_dict("calendar_event_bindings", values)
+        return binding
 
     def create_prompt_harness(self, prompt_harness: PromptHarness) -> PromptHarness:
         values = asdict(prompt_harness)
@@ -1109,7 +1179,171 @@ class GaiaRepository:
         )
 
     def get_action(self, organization_id: str, action_id: str) -> JsonDict | None:
-        return self._get_tenant_row("actions", organization_id, action_id, ["dependencies", "retention_policy"])
+        record = self._get_tenant_row(
+            "actions",
+            organization_id,
+            action_id,
+            [
+                "recurrence",
+                "dependencies",
+                "environmental_conditions",
+                "regulatory_conditions",
+                "calendar_binding",
+                "retention_policy",
+            ],
+        )
+        if record is not None:
+            record["weather_sensitive"] = bool(record["weather_sensitive"])
+            record["user_confirmation_required"] = bool(record["user_confirmation_required"])
+        return record
+
+    def list_actions_for_season_plan(self, organization_id: str, season_plan_id: str) -> list[JsonDict]:
+        self._require_season_plan(organization_id, season_plan_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM actions
+            WHERE organization_id = ? AND season_plan_id = ? AND deleted_at IS NULL
+            ORDER BY COALESCE(preferred_at, earliest_at, latest_at, created_at), id
+            """,
+            (organization_id, season_plan_id),
+        ).fetchall()
+        records = []
+        for row in rows:
+            record = _decode_json_fields(
+                dict(row),
+                [
+                    "recurrence",
+                    "dependencies",
+                    "environmental_conditions",
+                    "regulatory_conditions",
+                    "calendar_binding",
+                    "retention_policy",
+                ],
+            )
+            record["weather_sensitive"] = bool(record["weather_sensitive"])
+            record["user_confirmation_required"] = bool(record["user_confirmation_required"])
+            records.append(record)
+        return records
+
+    def update_action_completion(
+        self,
+        organization_id: str,
+        action_id: str,
+        status: str,
+        *,
+        completed_at: str | None = None,
+    ) -> bool:
+        self._require_action(organization_id, action_id)
+        result = self.connection.execute(
+            """
+            UPDATE actions
+            SET completion_status = ?, completed_at = ?, updated_at = ?
+            WHERE organization_id = ? AND id = ? AND deleted_at IS NULL
+            """,
+            (status, completed_at, now_iso(), organization_id, action_id),
+        )
+        self.connection.commit()
+        return result.rowcount == 1
+
+    def get_season_plan(self, organization_id: str, season_plan_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "season_plans",
+            organization_id,
+            season_plan_id,
+            [
+                "crop_or_plant_ids",
+                "date_range",
+                "tasks",
+                "planning_basis",
+                "climate_basis",
+                "forecast_basis",
+                "regulatory_constraints",
+                "market_context",
+                "retention_policy",
+            ],
+        )
+
+    def list_season_plans(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM season_plans
+            WHERE organization_id = ? AND workspace_id = ? AND deleted_at IS NULL
+            ORDER BY generated_at DESC, id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(
+                dict(row),
+                [
+                    "crop_or_plant_ids",
+                    "date_range",
+                    "tasks",
+                    "planning_basis",
+                    "climate_basis",
+                    "forecast_basis",
+                    "regulatory_constraints",
+                    "market_context",
+                    "retention_policy",
+                ],
+            )
+            for row in rows
+        ]
+
+    def get_calendar_binding(self, organization_id: str, calendar_binding_id: str) -> JsonDict | None:
+        return self._get_tenant_row("calendar_bindings", organization_id, calendar_binding_id, ["scopes", "retention_policy"])
+
+    def get_calendar_preview(self, organization_id: str, preview_id: str) -> JsonDict | None:
+        return self._get_tenant_row("calendar_previews", organization_id, preview_id, ["event_previews", "retention_policy"])
+
+    def mark_calendar_preview_committed(self, organization_id: str, preview_id: str, committed_at: str) -> bool:
+        self._require_calendar_preview(organization_id, preview_id)
+        result = self.connection.execute(
+            """
+            UPDATE calendar_previews
+            SET status = 'committed', committed_at = ?, updated_at = ?
+            WHERE organization_id = ? AND id = ? AND deleted_at IS NULL
+            """,
+            (committed_at, now_iso(), organization_id, preview_id),
+        )
+        self.connection.commit()
+        return result.rowcount == 1
+
+    def find_calendar_event_binding(
+        self,
+        organization_id: str,
+        action_id: str,
+        calendar_binding_id: str,
+        plan_version: int,
+    ) -> JsonDict | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM calendar_event_bindings
+            WHERE organization_id = ? AND action_id = ? AND calendar_binding_id = ?
+                AND plan_version = ? AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (organization_id, action_id, calendar_binding_id, plan_version),
+        ).fetchone()
+        record = _row_to_dict(row)
+        if record is None:
+            return None
+        return _decode_json_fields(record, ["retention_policy"])
+
+    def list_calendar_event_bindings_for_plan(self, organization_id: str, season_plan_id: str) -> list[JsonDict]:
+        self._require_season_plan(organization_id, season_plan_id)
+        rows = self.connection.execute(
+            """
+            SELECT ceb.*
+            FROM calendar_event_bindings ceb
+            JOIN actions a ON a.id = ceb.action_id AND a.organization_id = ceb.organization_id
+            WHERE ceb.organization_id = ? AND a.season_plan_id = ? AND ceb.deleted_at IS NULL
+            ORDER BY ceb.last_synced_at, ceb.id
+            """,
+            (organization_id, season_plan_id),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["retention_policy"]) for row in rows]
 
     def get_model_run(self, organization_id: str, model_run_id: str) -> JsonDict | None:
         return self._get_tenant_row(
@@ -1205,7 +1439,10 @@ class GaiaRepository:
             "movement_requests",
             "movement_decisions",
             "season_plans",
+            "season_plan_revisions",
             "calendar_bindings",
+            "calendar_previews",
+            "calendar_event_bindings",
             "conversations",
             "messages",
             "plant_profiles",
@@ -1316,6 +1553,18 @@ class GaiaRepository:
     def _require_action(self, organization_id: str, action_id: str) -> None:
         if self.get_action(organization_id, action_id) is None:
             raise TenantAccessError("Action is missing or inaccessible")
+
+    def _require_season_plan(self, organization_id: str, season_plan_id: str) -> None:
+        if self.get_season_plan(organization_id, season_plan_id) is None:
+            raise TenantAccessError("SeasonPlan is missing or inaccessible")
+
+    def _require_calendar_binding(self, organization_id: str, calendar_binding_id: str) -> None:
+        if self.get_calendar_binding(organization_id, calendar_binding_id) is None:
+            raise TenantAccessError("CalendarBinding is missing or inaccessible")
+
+    def _require_calendar_preview(self, organization_id: str, preview_id: str) -> None:
+        if self.get_calendar_preview(organization_id, preview_id) is None:
+            raise TenantAccessError("CalendarPreview is missing or inaccessible")
 
     def _require_evidence_claim(self, organization_id: str, evidence_claim_id: str) -> None:
         if self._get_tenant_row(

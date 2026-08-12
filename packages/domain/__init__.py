@@ -1,6 +1,8 @@
 from .models import (
     Action,
     CalendarBinding,
+    CalendarEventBinding,
+    CalendarPreview,
     Conversation,
     EnvironmentalSnapshot,
     EvidenceClaim,
@@ -28,6 +30,7 @@ from .models import (
     ResearchCollection,
     ResearchWork,
     SeasonPlan,
+    SeasonPlanRevision,
     SourceRecord,
     User,
     UserPlant,
@@ -40,6 +43,8 @@ from .models import (
 __all__ = [
     "Action",
     "CalendarBinding",
+    "CalendarEventBinding",
+    "CalendarPreview",
     "Conversation",
     "EnvironmentalSnapshot",
     "EvidenceClaim",
@@ -67,6 +72,7 @@ __all__ = [
     "ResearchCollection",
     "ResearchWork",
     "SeasonPlan",
+    "SeasonPlanRevision",
     "SourceRecord",
     "User",
     "UserPlant",

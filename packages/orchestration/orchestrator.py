@@ -14,10 +14,11 @@ from packages.model_gateway import (
     validate_guidance_plan_draft,
 )
 from packages.persistence import GaiaRepository
+from packages.season import SeasonContextProvider, SeasonPlanRequest, SeasonService
 from packages.tools import ToolExecutionContext
 
 
-RouteDecision = Literal["geography", "environment", "reasoning"]
+RouteDecision = Literal["geography", "environment", "reasoning", "season"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,12 +45,16 @@ class GaiaOrchestrator:
         model_gateway: ModelGateway,
         default_model_provider_id: str = "ollama-local",
         botanist: BotanistService | None = None,
+        season: SeasonService | None = None,
+        season_context_provider: SeasonContextProvider | None = None,
     ) -> None:
         self.repository = repository
         self.context_compiler = context_compiler
         self.model_gateway = model_gateway
         self.default_model_provider_id = default_model_provider_id
         self.botanist = botanist
+        self.season = season
+        self.season_context_provider = season_context_provider
 
     async def handle_chat(
         self,
@@ -75,6 +80,8 @@ class GaiaOrchestrator:
             return await self._handle_geography(context, conversation.id, user_message.id, location_id)
         if route == "environment":
             return await self._handle_environment(context, conversation.id, user_message.id, location_id)
+        if route == "season" and self.season is not None and self.season_context_provider is not None:
+            return await self._handle_season(context, conversation.id, user_message.id, location_id, message)
         return await self._handle_reasoning(context, conversation.id, user_message.id, location_id, message, user_plant_id)
 
     async def _handle_geography(
@@ -291,6 +298,49 @@ class GaiaOrchestrator:
             },
         )
 
+    async def _handle_season(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        location_id: str,
+        message: str,
+    ) -> ChatResult:
+        crops = _extract_crops(message)
+        request = SeasonPlanRequest(
+            workspace_id=context.workspace_id,
+            location_id=location_id,
+            objective=message,
+            crop_names=crops,
+            start_date="2026-09-15",
+            end_date="2026-12-15",
+            constraints={"planning_date": "2026-08-11"},
+            timezone="America/Chicago",
+        )
+        season_context = await self.season_context_provider.build(context, request)
+        plan, actions, model_run_ids = await self.season.create_plan(context, request, season_context)
+        content = f"{plan.name}: {len(actions)} actions created. Confidence: {plan.confidence}. Calendar writes require preview and confirmation."
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="season",
+                metadata={"season_plan_id": plan.id, "action_count": len(actions), "model_run_count": len(model_run_ids)},
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="season",
+            content=content,
+            model_run_ids=model_run_ids,
+            model_run_count=len(model_run_ids),
+            provider_diagnostics={"season": {"plan_id": plan.id, "action_count": len(actions)}},
+        )
+
     def _safe_failure(
         self,
         context: ToolExecutionContext,
@@ -364,11 +414,22 @@ class GaiaOrchestrator:
 
 def classify_route(message: str) -> RouteDecision:
     text = message.lower()
+    if "plan my" in text or "fall garden" in text or "add this to my calendar" in text or "calendar" in text:
+        return "season"
     if "county" in text or "hardiness zone" in text or "where am i" in text:
         return "geography"
     if "environmental condition" in text or "weather" in text or "soil" in text or "temperature" in text:
         return "environment"
     return "reasoning"
+
+
+def _extract_crops(message: str) -> list[str]:
+    text = message.lower()
+    crops = []
+    for crop in ["tomatoes", "peppers", "collards", "tomato", "pepper", "collard", "citrus"]:
+        if crop in text:
+            crops.append({"tomatoes": "tomato", "peppers": "pepper", "collards": "collard"}.get(crop, crop))
+    return list(dict.fromkeys(crops)) or ["crop"]
 
 
 def _measurement_text(measurement: dict) -> str:

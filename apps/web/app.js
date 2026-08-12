@@ -25,6 +25,12 @@ const movementForm = document.querySelector("#movement-form");
 const sentinelStatus = document.querySelector("#sentinel-status");
 const sentinelFreshness = document.querySelector("#sentinel-freshness");
 const sentinelOutput = document.querySelector("#sentinel-output");
+const seasonDemo = document.querySelector("#season-demo");
+const calendarPreview = document.querySelector("#calendar-preview");
+const seasonConfidence = document.querySelector("#season-confidence");
+const seasonWindow = document.querySelector("#season-window");
+const seasonTimeline = document.querySelector("#season-timeline");
+const seasonOutput = document.querySelector("#season-output");
 
 const plants = [
   {
@@ -89,6 +95,18 @@ const plants = [
       unresolved: [],
       source_count: 3,
       note: "GAIA is not the legal authority.",
+    },
+    season: {
+      name: "Fall garden plan",
+      confidence: "MODERATE",
+      window: "2026-09-15 to 2026-12-15",
+      actions: [
+        { title: "Prepare bed for tomato", date: "2026-09-15", type: "prepare_bed", basis: "climatological seasonal context" },
+        { title: "Transplant tomato", date: "2026-09-29", type: "transplant", basis: "climatological seasonal context", weather_sensitive: true },
+        { title: "Check tomato moisture", date: "2026-10-01", type: "water_check", basis: "check before irrigating" },
+      ],
+      calendar: { preview_required: true, external_writes: 0, stale_preview_protection: true },
+      luna: { phase: "waxing crescent", influence_on_plan: "None", evidence_status: "Experimental" },
     },
   },
 ];
@@ -229,6 +247,28 @@ movementForm.addEventListener("submit", (event) => {
   providers.textContent = JSON.stringify({ sentinel: { aphis: "AVAILABLE", "texas-agriculture": "AVAILABLE" } }, null, 2);
 });
 
+seasonDemo.addEventListener("click", () => {
+  renderSeason(selectedPlant.season);
+  route.textContent = "season";
+  modelRuns.textContent = "0";
+  sources.textContent = "3";
+});
+
+calendarPreview.addEventListener("click", () => {
+  const plan = selectedPlant.season;
+  const preview = {
+    status: "PREVIEW",
+    external_writes: 0,
+    events: plan.actions.map((action) => ({
+      summary: `GAIA - ${action.title}`,
+      date: action.date,
+      confirmation_required: true,
+    })),
+  };
+  seasonOutput.textContent = JSON.stringify(preview, null, 2);
+  providers.textContent = JSON.stringify({ calendar: { "fixture-calendar": "preview_only" } }, null, 2);
+});
+
 function selectDemoResponse(text) {
   const lower = text.toLowerCase();
   return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
@@ -310,6 +350,20 @@ function selectPlant(plant) {
   sentinelStatus.textContent = plant.sentinel?.status || "UNRESOLVED";
   sentinelFreshness.textContent = `freshness: ${plant.sentinel?.freshness || "idle"}`;
   sentinelOutput.textContent = JSON.stringify(plant.sentinel || {}, null, 2);
+  renderSeason(plant.season);
+}
+
+function renderSeason(plan) {
+  const safePlan = plan || { confidence: "PROVISIONAL", window: "no plan", actions: [] };
+  seasonConfidence.textContent = safePlan.confidence;
+  seasonWindow.textContent = safePlan.window;
+  seasonTimeline.innerHTML = "";
+  for (const action of safePlan.actions) {
+    const item = document.createElement("li");
+    item.innerHTML = `<strong>${action.date}</strong><span>${action.title}</span>`;
+    seasonTimeline.appendChild(item);
+  }
+  seasonOutput.textContent = JSON.stringify(safePlan, null, 2);
 }
 
 renderPlants();

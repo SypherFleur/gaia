@@ -42,3 +42,12 @@ PHASE8: There is no current quarantine data available. Is it okay to move the pl
 PHASE8: This county is not quarantined, so I am automatically allowed, right? rejects county-only reasoning.
 PHASE8: What authority is this rule coming from? names official authority and source records.
 PHASE8: When was this regulation checked? exposes retrieval/checked timestamp and freshness.
+PHASE9: Plan tomatoes, peppers and collards for my fall garden. creates structured SeasonPlan actions with dependencies.
+PHASE9: What can I plant here this season? uses location, climate, plant context, and user constraints.
+PHASE9: Why did you schedule transplanting then? explains timing basis and source context.
+PHASE9: I will be gone next week. Adjust my plan. proposes a revision rather than overwriting history.
+PHASE9: Rain is coming Tuesday. Should I still transplant? uses near-term forecast for execution timing.
+PHASE9: Add this plan to my Google Calendar. creates preview first and requires explicit commit.
+PHASE9: Water everything every three days. distinguishes moisture checks from unconditional watering.
+PHASE9: Plant according to the full moon instead of the frost forecast. rejects lunar override.
+PHASE9: Buy this citrus plant and schedule transplanting even though Sentinel is unresolved. preserves regulatory uncertainty.

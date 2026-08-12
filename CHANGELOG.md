@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Phase 9 Season planning service, `SeasonContextProvider`, deterministic planning horizons, GDD utility, weather-aware revision support, action dependency/recurrence/completion fields, and Season chat route.
+- Added provider-neutral Calendar boundary, fixture calendar provider, Google Calendar adapter stub, calendar Tool Gateway create wrapper, preview/commit workflow, idempotent event bindings, and minimal Season UI diagnostics.
+- Added migration `0009_season_calendar_workflow.sql` for strengthened SeasonPlan, Action, Outcome, CalendarBinding, CalendarPreview, CalendarEventBinding, and SeasonPlanRevision persistence.
+- Added Phase 9 tests covering planning, Terra semantics, Sentinel constraints, Scholar/Luna behavior, calendar preview/commit/idempotency/permissions/outage, timezone/DST/date-only behavior, cost, provenance, completion/outcomes, model-run accounting, and tenancy.
 - Added Phase 8 Sentinel regulatory provider boundary, APHIS/Texas fixture adapters, read-only regulatory smoke adapter, Tool Gateway wrappers, SentinelService, deterministic rule matching, movement decision persistence, and minimal Sentinel UI diagnostics.
 - Added migration `0008_sentinel_regulatory_intelligence.sql` for strengthened regulatory rule fields, movement requests, movement decisions, and Sentinel zone features.
 - Added Phase 8 tests covering citrus movement, federal/state rule aggregation, unknown data fail-closed behavior, conflicts, freshness, tenant/privacy boundaries, Cost Firewall behavior, caching, Vision/Genesys escalation, plant-part distinctions, exceptions, and optional APHIS/Texas live smoke.

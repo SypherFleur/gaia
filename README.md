@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 8: Sentinel Biosecurity, Regulation, and Plant Movement Intelligence.
+Phase 9: Season Agricultural Planning and Calendar Execution.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -150,4 +150,21 @@ Optional APHIS/Texas read-only smoke:
 ```powershell
 $env:GAIA_RUN_SENTINEL_SMOKE='1'
 py -3.13 -m unittest tests.phase8.test_sentinel_smoke
+```
+
+## Phase 9 Season Planning And Calendar
+
+Season adds structured agricultural planning:
+
+- `SeasonContext`, `SeasonPlanRequest`, deterministic planner, `SeasonPlan`, `SeasonPlanRevision`, and Season actions.
+- Explicit long-range climate-vs-forecast horizons.
+- GDD utility, frost/heat constraints, water-check semantics, Sentinel constraints, optional Scholar evidence, and experimental Luna display with no agronomic override.
+- Provider-neutral `CalendarProvider`, fixture calendar provider, Google Calendar adapter boundary, calendar preview/commit workflow, and idempotent event bindings.
+- Calendar writes require `calendar.create` and explicit preview commit.
+
+Optional Google Calendar live smoke is not enabled by default and requires explicitly supplied OAuth/test-calendar configuration:
+
+```powershell
+$env:GAIA_RUN_CALENDAR_SMOKE='1'
+py -3.13 -m unittest tests.phase9.test_google_calendar_smoke
 ```

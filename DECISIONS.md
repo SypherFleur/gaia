@@ -441,3 +441,31 @@ Phase 8 does not file permits, submit reports, contact regulators, pay fees, or 
 ## D110. Vision And Genesys Escalate To Sentinel
 
 Vision hypotheses tagged as potentially regulated and Genesys legal-shipment questions route to Sentinel. Vision does not diagnose regulated disease, and Genesys accession metadata does not imply import or movement eligibility.
+
+## D111. Season Owns Agricultural Planning
+
+Season owns crop/action scheduling semantics. Calendar providers are execution surfaces only and must not own or mutate the canonical `SeasonPlan`.
+
+## D112. Long-Range Planning Is Climate-Based
+
+Plans outside the forecast horizon use climate normals, historical distributions, or climatological context. GAIA must not present 90+ day planning as weather forecasting.
+
+## D113. Season Actions Use Windows And Dependencies
+
+Season creates structured actions with earliest, preferred, and latest timing where possible. One exact date is used only for scheduling representation, while the action still preserves its window and dependencies.
+
+## D114. Luna Cannot Override Agronomy
+
+Lunar phase may be displayed as experimental context with no plan influence. It cannot override frost, heat, crop biology, Sentinel restrictions, or stronger evidence.
+
+## D115. Calendar Writes Require Preview And Commit
+
+Calendar event creation follows `SeasonPlan -> CalendarPreview -> user approval -> commit`. Preview creates no external event, and stale previews cannot create events after plan version changes.
+
+## D116. Calendar Provider Boundary Is Mandatory
+
+GAIA uses provider-neutral calendar contracts. Domain and workflow code must not depend on Google Calendar response shapes. Live Google OAuth remains optional and fixture-backed tests must run without credentials.
+
+## D117. No Autonomous Calendar Rescheduling
+
+Season may recommend revisions when weather, pest, user, or regulatory context changes, but Phase 9 cannot silently move calendar events. Meaningful updates require explicit approval.

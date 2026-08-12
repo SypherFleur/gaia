@@ -189,6 +189,7 @@ def default_protocol_two_registry() -> ProviderRegistry:
         _provider("plantnet", "Pl@ntNet", ProviderType.VISION, "Pl@ntNet", BillingClass.FREE, AuthenticationRequirement.REQUIRED_API_KEY, FreshnessClass.SHORT, quota_policy=ProviderQuotaPolicy(daily_requests=500)),
         _provider("aphis", "APHIS", ProviderType.REGULATION, "USDA APHIS", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.REGULATORY_CURRENT, "US"),
         _provider("texas-agriculture", "Texas Department of Agriculture", ProviderType.REGULATION, "Texas Department of Agriculture", BillingClass.FREE, AuthenticationRequirement.NONE, FreshnessClass.REGULATORY_CURRENT, "US/TX"),
+        _provider("fixture-calendar", "Fixture Calendar", ProviderType.CALENDAR, "local", BillingClass.LOCAL, AuthenticationRequirement.LOCAL_ONLY, FreshnessClass.STATIC, enabled=True, remote=False),
         _provider("google-calendar", "Google Calendar", ProviderType.CALENDAR, "Google", BillingClass.FREE, AuthenticationRequirement.OAUTH, FreshnessClass.SHORT),
         _provider("ollama-local", "Local Ollama", ProviderType.MODEL, "local", BillingClass.LOCAL, AuthenticationRequirement.LOCAL_ONLY, FreshnessClass.STATIC, enabled=True, remote=False),
         _provider("llama-cpp-local", "Local llama.cpp", ProviderType.MODEL, "local", BillingClass.LOCAL, AuthenticationRequirement.LOCAL_ONLY, FreshnessClass.STATIC, enabled=True, remote=False),
