@@ -51,3 +51,12 @@ PHASE9: Add this plan to my Google Calendar. creates preview first and requires 
 PHASE9: Water everything every three days. distinguishes moisture checks from unconditional watering.
 PHASE9: Plant according to the full moon instead of the frost forecast. rejects lunar override.
 PHASE9: Buy this citrus plant and schedule transplanting even though Sentinel is unresolved. preserves regulatory uncertainty.
+PHASE10: What does the tomato market look like around here? returns dated Mercator context, not a forecast or trading signal.
+PHASE10: How much tomato production occurs in this county? preserves NASS period/year and geography.
+PHASE10: What crops are economically significant in this region? explains missingness and regional context without inventing county data.
+PHASE10: Should I plant tomatoes because prices are high? keeps agronomic suitability ahead of economics.
+PHASE10: This market report is two years old. What are prices today? does not pretend historical data is current.
+PHASE10: Where are these vegetables generally moving from and to? labels structural supply-chain context, not live trucks.
+PHASE10: What is the best crop for my fall garden economically? uses agronomic suitability first with dated market context.
+PHASE10: Can I import this profitable crop even though Sentinel says unresolved? answers no and preserves Sentinel control.
+PHASE10: Why are you calling this market information current? exposes report date, retrieval time, and freshness basis.

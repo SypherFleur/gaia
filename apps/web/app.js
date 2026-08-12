@@ -31,6 +31,10 @@ const seasonConfidence = document.querySelector("#season-confidence");
 const seasonWindow = document.querySelector("#season-window");
 const seasonTimeline = document.querySelector("#season-timeline");
 const seasonOutput = document.querySelector("#season-output");
+const mercatorDemo = document.querySelector("#mercator-demo");
+const mercatorFreshness = document.querySelector("#mercator-freshness");
+const mercatorDate = document.querySelector("#mercator-date");
+const mercatorOutput = document.querySelector("#mercator-output");
 
 const plants = [
   {
@@ -108,6 +112,43 @@ const plants = [
       calendar: { preview_required: true, external_writes: 0, stale_preview_protection: true },
       luna: { phase: "waxing crescent", influence_on_plan: "None", evidence_status: "Experimental" },
     },
+    mercator: {
+      commodity: { canonical_name: "tomato", source_labels: ["Tomatoes, fresh market", "TOMATOES"] },
+      production_statistics: [
+        {
+          statistic: "production",
+          value: 12500,
+          unit: "cwt",
+          geography: { state_code: "TX", county_or_district: "Travis County" },
+          observation_period: "2025",
+          freshness: "recent_periodic",
+          limitation: "Annual NASS statistic; not current crop availability.",
+        },
+      ],
+      price_observations: [
+        {
+          market: "Dallas terminal market fixture",
+          report_date: "2026-08-10",
+          value: 18,
+          unit: "$/25 lb box",
+          package: "25 lb box",
+          grade: "medium",
+          freshness: "current",
+          limitation: "Dated market report; not a price forecast.",
+        },
+      ],
+      supply_chain_context: [
+        {
+          origin_region: "Texas fixture production region",
+          destination_region: "Dallas terminal market fixture",
+          transport_mode: "truck",
+          period: "2022",
+          data_class: "STRUCTURAL_SUPPLY_CHAIN",
+          limitation: "Historical structural context; not live logistics.",
+        },
+      ],
+      source_count: 2,
+    },
   },
 ];
 
@@ -137,6 +178,14 @@ const demoResponses = [
     content: "The image route stores visible observations separately from cautious hypotheses. It does not persist a confirmed diagnosis.",
     sources: 1,
     providers: { vision: { "fixture-vision-local": "AVAILABLE" } },
+  },
+  {
+    match: "market",
+    route: "economics",
+    model_run_count: 0,
+    content: "Mercator found dated economic context for tomato. Latest production period: 2025. Recent market report date: 2026-08-10. This is descriptive context, not a forecast, guarantee, or trading signal.",
+    sources: 2,
+    providers: { mercator: { "usda-nass": "AVAILABLE", "usda-ams": "AVAILABLE" } },
   },
   {
     match: "tomato",
@@ -269,6 +318,14 @@ calendarPreview.addEventListener("click", () => {
   providers.textContent = JSON.stringify({ calendar: { "fixture-calendar": "preview_only" } }, null, 2);
 });
 
+mercatorDemo.addEventListener("click", () => {
+  renderMercator(selectedPlant.mercator);
+  route.textContent = "economics";
+  modelRuns.textContent = "0";
+  sources.textContent = String(selectedPlant.mercator?.source_count || 0);
+  providers.textContent = JSON.stringify({ mercator: { "usda-nass": "AVAILABLE", "usda-ams": "AVAILABLE" } }, null, 2);
+});
+
 function selectDemoResponse(text) {
   const lower = text.toLowerCase();
   return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
@@ -351,6 +408,7 @@ function selectPlant(plant) {
   sentinelFreshness.textContent = `freshness: ${plant.sentinel?.freshness || "idle"}`;
   sentinelOutput.textContent = JSON.stringify(plant.sentinel || {}, null, 2);
   renderSeason(plant.season);
+  renderMercator(plant.mercator);
 }
 
 function renderSeason(plan) {
@@ -364,6 +422,14 @@ function renderSeason(plan) {
     seasonTimeline.appendChild(item);
   }
   seasonOutput.textContent = JSON.stringify(safePlan, null, 2);
+}
+
+function renderMercator(context) {
+  const safeContext = context || { production_statistics: [], price_observations: [], supply_chain_context: [] };
+  const report = safeContext.price_observations[0] || {};
+  mercatorFreshness.textContent = report.freshness || "unavailable";
+  mercatorDate.textContent = report.report_date ? `report date: ${report.report_date}` : "no report date";
+  mercatorOutput.textContent = JSON.stringify(safeContext, null, 2);
 }
 
 renderPlants();

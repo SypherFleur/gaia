@@ -38,6 +38,7 @@ class SeasonContext:
     recent_observations: list[JsonDict] = field(default_factory=list)
     sentinel_constraints: list[JsonDict] = field(default_factory=list)
     scholar_evidence: list[JsonDict] = field(default_factory=list)
+    mercator_context: JsonDict | None = None
     user_objectives: list[str] = field(default_factory=list)
     resource_constraints: JsonDict = field(default_factory=dict)
     date_range: JsonDict = field(default_factory=dict)
@@ -58,6 +59,7 @@ class SeasonContext:
             "recent_observations": self.recent_observations,
             "sentinel_constraints": self.sentinel_constraints,
             "scholar_evidence": self.scholar_evidence,
+            "mercator_context": self.mercator_context,
             "user_objectives": self.user_objectives,
             "resource_constraints": self.resource_constraints,
             "date_range": self.date_range,
@@ -70,4 +72,3 @@ class SeasonPlanner(Protocol):
     async def create_plan(self, request: SeasonPlanRequest, context: SeasonContext) -> tuple[SeasonPlan, list[JsonDict]]: ...
 
     async def revise_plan(self, existing_plan: SeasonPlan, updated_context: SeasonContext) -> JsonDict: ...
-

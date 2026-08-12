@@ -24,6 +24,7 @@ async def post_season_plan(
     scholar_evidence: list[dict] | None = None,
     weather_forecast_context: dict | None = None,
     use_model: bool = False,
+    include_mercator: bool = False,
 ) -> dict:
     request = SeasonPlanRequest(
         workspace_id=workspace_id,
@@ -42,6 +43,7 @@ async def post_season_plan(
         sentinel_constraints=sentinel_constraints,
         scholar_evidence=scholar_evidence,
         weather_forecast_context=weather_forecast_context,
+        include_mercator=include_mercator,
     )
     plan, actions, model_run_ids = await season.create_plan(context, request, season_context)
     return {"season_plan": asdict(plan), "actions": [asdict(action) for action in actions], "model_run_ids": model_run_ids}
@@ -75,4 +77,3 @@ async def post_calendar_commit(
     preview_id: str,
 ) -> dict:
     return await calendar.commit_preview(context, preview_id=preview_id)
-

@@ -48,6 +48,7 @@ class DeterministicSeasonPlanner:
             climate_basis={"timing_basis": timing_basis, "hemisphere": hemi, "not_weather_forecast": timing_basis.startswith("climate") or timing_basis.startswith("climatological")},
             forecast_basis={"timing_basis": timing_basis, "forecast_used": timing_basis in {"forecast_execution", "forecast_influenced", "current_conditions_and_local_observations"}},
             regulatory_constraints=regulatory_constraints,
+            market_context=_market_context(context),
             tasks=[],
             status="draft",
             confidence=confidence,
@@ -220,18 +221,40 @@ def _planning_basis(context: SeasonContext, generated_on: date, timing_basis: st
     env_sources = (context.environmental_snapshot or {}).get("source_record_ids", [])
     regulatory_sources = [source for item in context.sentinel_constraints for source in item.get("source_record_ids", [])]
     research_sources = [source for item in context.scholar_evidence for source in item.get("source_record_ids", [])]
+    mercator_sources = (context.mercator_context or {}).get("source_record_ids", [])
     return {
         "climate_sources": env_sources,
         "forecast_sources": env_sources if "forecast" in timing_basis else [],
         "plant_sources": [source for profile in context.plant_profiles for source in profile.get("source_record_ids", [])],
         "regulatory_sources": regulatory_sources,
         "research_sources": research_sources,
+        "market_sources": mercator_sources,
         "geo_sources": geo_sources,
         "context_timestamp": now_iso(),
         "generated_on": generated_on.isoformat(),
         "timing_basis": timing_basis,
         "hemisphere": hemi,
     }
+
+
+def _market_context(context: SeasonContext) -> list[JsonDict]:
+    mercator = context.mercator_context
+    if not mercator:
+        return []
+    return [
+        {
+            "commodity": mercator.get("commodity", {}),
+            "freshness": mercator.get("freshness", {}),
+            "data_dates": mercator.get("data_dates", {}),
+            "production_statistics": mercator.get("production_statistics", [])[:3],
+            "price_observations": mercator.get("price_observations", [])[:3],
+            "limitations": [
+                "Economic context is descriptive and cannot override agronomic suitability or Sentinel restrictions.",
+                *mercator.get("limitations", []),
+            ],
+            "source_record_ids": mercator.get("source_record_ids", []),
+        }
+    ]
 
 
 def _action(

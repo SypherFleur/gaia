@@ -18,6 +18,7 @@ from packages.domain import (
     GuidancePlan,
     Location,
     MediaAttachment,
+    MercatorContext,
     Message,
     Membership,
     ModelRun,
@@ -675,6 +676,31 @@ class GaiaRepository:
         self._insert_from_dict("movement_decisions", values)
         return movement_decision
 
+    def create_mercator_context(self, mercator_context: MercatorContext) -> MercatorContext:
+        self._require_workspace(mercator_context.organization_id, mercator_context.workspace_id)
+        if mercator_context.location_id is not None:
+            self._require_location(mercator_context.organization_id, mercator_context.location_id)
+        values = asdict(mercator_context)
+        for key in [
+            "commodity",
+            "crop_or_taxon",
+            "geography",
+            "production_statistics",
+            "market_reports",
+            "price_observations",
+            "regional_economic_context",
+            "supply_chain_context",
+            "data_dates",
+            "freshness",
+            "provider_statuses",
+            "source_record_ids",
+            "limitations",
+            "retention_policy",
+        ]:
+            values[key] = _json(values[key])
+        self._insert_from_dict("mercator_contexts", values)
+        return mercator_context
+
     def create_season_plan(self, season_plan: SeasonPlan) -> SeasonPlan:
         self._require_workspace(season_plan.organization_id, season_plan.workspace_id)
         if season_plan.location_id is not None:
@@ -892,6 +918,62 @@ class GaiaRepository:
                 "retention_policy",
             ],
         )
+
+    def get_mercator_context(self, organization_id: str, mercator_context_id: str) -> JsonDict | None:
+        return self._get_tenant_row(
+            "mercator_contexts",
+            organization_id,
+            mercator_context_id,
+            [
+                "commodity",
+                "crop_or_taxon",
+                "geography",
+                "production_statistics",
+                "market_reports",
+                "price_observations",
+                "regional_economic_context",
+                "supply_chain_context",
+                "data_dates",
+                "freshness",
+                "provider_statuses",
+                "source_record_ids",
+                "limitations",
+                "retention_policy",
+            ],
+        )
+
+    def list_mercator_contexts(self, organization_id: str, workspace_id: str) -> list[JsonDict]:
+        self._require_workspace(organization_id, workspace_id)
+        rows = self.connection.execute(
+            """
+            SELECT * FROM mercator_contexts
+            WHERE organization_id = ? AND workspace_id = ? AND deleted_at IS NULL
+            ORDER BY generated_at DESC, id
+            """,
+            (organization_id, workspace_id),
+        ).fetchall()
+        return [
+            _decode_json_fields(
+                dict(row),
+                [
+                    "commodity",
+                    "crop_or_taxon",
+                    "geography",
+                    "production_statistics",
+                    "market_reports",
+                    "price_observations",
+                    "regional_economic_context",
+                    "supply_chain_context",
+                    "data_dates",
+                    "freshness",
+                    "provider_statuses",
+                    "source_record_ids",
+                    "limitations",
+                    "retention_policy",
+                ],
+            )
+            for row in rows
+        ]
 
     def get_user_plant(self, organization_id: str, user_plant_id: str) -> JsonDict | None:
         return self._get_tenant_row("user_plants", organization_id, user_plant_id, ["tags", "retention_policy"])
@@ -1525,6 +1607,10 @@ class GaiaRepository:
     def _require_environmental_snapshot(self, organization_id: str, snapshot_id: str) -> None:
         if self.get_environmental_snapshot(organization_id, snapshot_id) is None:
             raise TenantAccessError("EnvironmentalSnapshot is missing or inaccessible")
+
+    def _require_mercator_context(self, organization_id: str, mercator_context_id: str) -> None:
+        if self.get_mercator_context(organization_id, mercator_context_id) is None:
+            raise TenantAccessError("MercatorContext is missing or inaccessible")
 
     def _require_user_plant(self, organization_id: str, user_plant_id: str) -> None:
         if self.get_user_plant(organization_id, user_plant_id) is None:

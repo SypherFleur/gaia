@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Phase 10 Mercator economic intelligence with provider-neutral `EconomicDataProvider`, NASS/AMS fixture/live boundaries, canonical `MercatorContext`, commodity normalization, unit comparability checks, supply-chain semantics, and economics chat routing.
+- Added migration `0010_mercator_economic_intelligence.sql` for tenant-scoped Mercator contexts.
+- Added Phase 10 tests covering NASS/AMS normalization, source dates, missing county data, unit incompatibility, stale/current labels, provider failures, structural supply-chain semantics, Season/Sentinel/Botanist integration, provenance, cost, cache, tenancy, exact-location privacy, and no model-fabricated market numbers.
+- Added Mercator architecture, economics classification, units/comparability, economic-content security, and NASS/AMS/BEA/Census data-source docs.
 - Added Phase 9 Season planning service, `SeasonContextProvider`, deterministic planning horizons, GDD utility, weather-aware revision support, action dependency/recurrence/completion fields, and Season chat route.
 - Added provider-neutral Calendar boundary, fixture calendar provider, Google Calendar adapter stub, calendar Tool Gateway create wrapper, preview/commit workflow, idempotent event bindings, and minimal Season UI diagnostics.
 - Added migration `0009_season_calendar_workflow.sql` for strengthened SeasonPlan, Action, Outcome, CalendarBinding, CalendarPreview, CalendarEventBinding, and SeasonPlanRevision persistence.

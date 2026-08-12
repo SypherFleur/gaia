@@ -52,6 +52,14 @@ GrowthStage = Literal[
     "unknown",
 ]
 VisionAnalysisStatus = Literal["AVAILABLE", "UNAVAILABLE", "PROVIDER_ERROR", "VALIDATION_FAILED"]
+EconomicDataClass = Literal[
+    "REALTIME_OR_CURRENT_REPORT",
+    "RECENT_PERIODIC_STATISTIC",
+    "HISTORICAL_SERIES",
+    "STRUCTURAL_SUPPLY_CHAIN",
+    "REGIONAL_ECONOMIC_CONTEXT",
+    "MODEL_OR_INFERENCE",
+]
 
 
 def new_id() -> str:
@@ -293,6 +301,109 @@ class EnvironmentalSnapshot(EntityMetadata):
     astronomical_context: JsonDict = field(default_factory=dict)
     provider_statuses: JsonDict = field(default_factory=dict)
     source_record_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Commodity(EntityMetadata):
+    canonical_name: str = ""
+    scientific_name: str | None = None
+    crop_or_taxon_id: str | None = None
+    source_labels: list[str] = field(default_factory=list)
+    commodity_group: str | None = None
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ProductionStatistic(EntityMetadata):
+    organization_id: str = ""
+    commodity: JsonDict = field(default_factory=dict)
+    statistic: str = ""
+    value: float | str | None = None
+    unit: str = ""
+    geography: JsonDict = field(default_factory=dict)
+    observation_period: str = ""
+    publication_date: str | None = None
+    retrieved_at: str = field(default_factory=now_iso)
+    freshness: str = "historical"
+    data_class: EconomicDataClass | str = "HISTORICAL_SERIES"
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class MarketObservation(EntityMetadata):
+    organization_id: str = ""
+    commodity: JsonDict = field(default_factory=dict)
+    market: str = ""
+    report_date: str = ""
+    value: float | str | None = None
+    unit: str = ""
+    package: str | None = None
+    grade: str | None = None
+    quality: str | None = None
+    currency: str | None = "USD"
+    currency_date_context: str | None = None
+    geography: JsonDict = field(default_factory=dict)
+    publication_date: str | None = None
+    retrieved_at: str = field(default_factory=now_iso)
+    freshness: str = "unknown"
+    data_class: EconomicDataClass | str = "RECENT_PERIODIC_STATISTIC"
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class EconomicRegionSnapshot(EntityMetadata):
+    organization_id: str = ""
+    geography: JsonDict = field(default_factory=dict)
+    metrics: list[JsonDict] = field(default_factory=list)
+    observation_period: str = ""
+    publication_date: str | None = None
+    retrieved_at: str = field(default_factory=now_iso)
+    freshness: str = "unknown"
+    data_class: EconomicDataClass | str = "REGIONAL_ECONOMIC_CONTEXT"
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class SupplyChainRecord(EntityMetadata):
+    organization_id: str = ""
+    commodity: JsonDict = field(default_factory=dict)
+    origin_region: JsonDict = field(default_factory=dict)
+    destination_region: JsonDict = field(default_factory=dict)
+    transport_mode: str | None = None
+    value: float | str | None = None
+    weight: float | str | None = None
+    unit: str | None = None
+    period: str = ""
+    publication_date: str | None = None
+    retrieved_at: str = field(default_factory=now_iso)
+    source: str = ""
+    data_class: EconomicDataClass | str = "STRUCTURAL_SUPPLY_CHAIN"
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class MercatorContext(EntityMetadata):
+    organization_id: str = ""
+    workspace_id: str = ""
+    location_id: str | None = None
+    commodity: JsonDict = field(default_factory=dict)
+    crop_or_taxon: JsonDict = field(default_factory=dict)
+    geography: JsonDict = field(default_factory=dict)
+    production_statistics: list[JsonDict] = field(default_factory=list)
+    market_reports: list[JsonDict] = field(default_factory=list)
+    price_observations: list[JsonDict] = field(default_factory=list)
+    regional_economic_context: list[JsonDict] = field(default_factory=list)
+    supply_chain_context: list[JsonDict] = field(default_factory=list)
+    data_dates: JsonDict = field(default_factory=dict)
+    freshness: JsonDict = field(default_factory=dict)
+    provider_statuses: JsonDict = field(default_factory=dict)
+    source_record_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    generated_at: str = field(default_factory=now_iso)
 
 
 @dataclass(slots=True)

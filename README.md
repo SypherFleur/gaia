@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 9: Season Agricultural Planning and Calendar Execution.
+Phase 10: Mercator Agricultural Economics, Markets and Supply-Chain Intelligence.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -167,4 +167,25 @@ Optional Google Calendar live smoke is not enabled by default and requires expli
 ```powershell
 $env:GAIA_RUN_CALENDAR_SMOKE='1'
 py -3.13 -m unittest tests.phase9.test_google_calendar_smoke
+```
+
+## Phase 10 Mercator Economics
+
+Mercator adds descriptive agricultural economics:
+
+- Provider-neutral `EconomicDataProvider` boundary.
+- USDA NASS production-statistics adapter boundary and fixtures.
+- USDA AMS MyMarketNews market-report adapter boundary and fixtures.
+- Canonical `MercatorContext` with commodity, geography, production statistics, market reports, price observations, regional economic context, supply-chain context, dates, freshness, provenance, and limitations.
+- Commodity normalization that links labels such as `TOMATOES`, `Fresh tomatoes`, and `Solanum lycopersicum` without discarding source-native labels.
+- Strict unit/package/grade comparability checks.
+- Structural supply-chain records that are explicitly historical/structural, not live logistics.
+- Optional Season and chat integration where economic context remains subordinate to agronomic suitability and Sentinel restrictions.
+
+Optional live economic smokes are not CI-required and require deliberate free/public configuration:
+
+```powershell
+$env:GAIA_RUN_NASS_SMOKE='1'
+$env:GAIA_NASS_API_KEY='...'
+py -3.13 -m unittest tests.phase10.test_mercator_economic_intelligence
 ```

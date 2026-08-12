@@ -469,3 +469,35 @@ GAIA uses provider-neutral calendar contracts. Domain and workflow code must not
 ## D117. No Autonomous Calendar Rescheduling
 
 Season may recommend revisions when weather, pest, user, or regulatory context changes, but Phase 9 cannot silently move calendar events. Meaningful updates require explicit approval.
+
+## D118. Mercator Is Descriptive Economic Context
+
+Mercator provides dated agricultural economics, market reports, and structural supply-chain context. It is not a trading platform, market forecaster, procurement engine, or financial guarantee system.
+
+## D119. Economic Provider Boundary Is Mandatory
+
+GAIA uses provider-neutral economics contracts. Domain, API, Season, and chat code must not depend directly on USDA NASS, USDA AMS, BEA, Census, FAOSTAT, or future provider response shapes.
+
+## D120. Current, Periodic, Historical, Structural, Regional, And Inferred Economics Are Separate
+
+Every economic fact must retain its data class. Annual production cannot become current crop availability, old market reports cannot become today's prices, and commodity-flow data cannot become live logistics.
+
+## D121. Economic Units Must Be Comparable Before Comparison
+
+Prices and market values preserve original value, unit, package, grade, quality, currency, and currency context. GAIA cannot compare incompatible units such as `$/box` and `$/lb` unless a defensible conversion is known.
+
+## D122. Economics Cannot Override Agronomy Or Regulation
+
+Mercator may inform Season planning after biological feasibility, user constraints, and Sentinel restrictions. Favorable prices cannot make a crop agronomically possible or legally permitted.
+
+## D123. Economic Provider Calls Use Public Geography By Default
+
+NASS/AMS Phase 10 requests use public administrative geography and do not send exact private farm coordinates. Tenant/workspace Mercator contexts remain scoped because they may be linked to private crop plans.
+
+## D124. Model-Generated Economic Numbers Are Rejected
+
+Future model synthesis may explain trusted Mercator context, but model-created prices, production values, source IDs, or trading signals cannot persist as authoritative economic data.
+
+## D125. Commercial Market Data Is Out Of Scope For Phase 10
+
+No commercial market-data subscriptions, paid providers, automatic paid fallback, purchasing workflow, or overage path may execute in Phase 10.
