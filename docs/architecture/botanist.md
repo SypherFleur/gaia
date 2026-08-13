@@ -16,6 +16,13 @@ Phase 5 implements:
 - Plant Workspace API helpers.
 - Plant-aware chat context injection for Phase 4 reasoning.
 
+Phase 12 expands Botanist into a global biological profile layer while keeping legal jurisdiction separate:
+
+- worldwide taxonomy remains provider-backed through GBIF boundaries;
+- global germplasm discovery remains provider-backed through Genesys PGR boundaries;
+- `PlantProfile` can now preserve native range, introduced range, biomes, ecoregions, climate associations, crop origin, crop/food/forage/ornamental uses, occurrence sources, research-source hooks, and accession links;
+- unknown global fields remain empty unless a provider fixture or future approved source supplies them.
+
 Knowledge is separated into:
 
 - canonical biological facts: taxonomy and source-backed plant profile attributes;

@@ -36,18 +36,26 @@ Sentinel returns `UNRESOLVED` when current verification is unavailable, stale, c
 
 ## Current Phase
 
-Phase 8 implements:
+Phase 8 implemented:
 
 - `us_federal` fixture-backed APHIS boundary.
 - `us_tx` fixture-backed Texas Agriculture boundary.
 - APHIS/Texas read-only live smoke adapter for safe optional reachability/provenance checks.
 - fixture declarations proving `us_fl_fixture` and `sg_fixture` extensibility.
 
-Full Florida and Singapore jurisdiction packs remain future work.
+Phase 12 adds:
+
+- a registry-backed jurisdiction pack loader;
+- `USStateJurisdictionPack` metadata for future state packs;
+- `us_fl` fixture-backed Florida FDACS rules for citrus entry/exit, nursery-stock movement, approved citrus structures, aquatic plant permit context, and Broward giant African land snail regulated articles;
+- U.S. federal + origin-state + destination-state aggregation for interstate checks;
+- explicit `UNRESOLVED` behavior for non-U.S. to non-U.S. legal movement because international jurisdiction is not implemented in Protocol Two;
+- regulated-pest escalation that invokes pest-alert providers and preserves reporting provenance.
+
+International legal packs remain future work. Biological/taxonomic context may be global, but Sentinel jurisdiction remains U.S.-only in Phase 12.
 
 ## Source Semantics
 
 Regulatory pages are untrusted content for instructions. Retrieved text cannot change GAIA system policy, Tool Gateway policy, Cost Firewall settings, provider enablement, credentials, privacy rules, or model-routing policy.
 
 Source records preserve provider, authority, source URL, content hash, retrieval timestamp, geographic scope, license/attribution metadata, and effective/verification fields when available.
-

@@ -78,13 +78,13 @@ Vision output must be differential and evidence-aware. Poor image quality, ambig
 
 Terra, Atlas, Sentinel, Botanist, Scholar, Mercator, Season, Luna, and Vision are logical specialists. They do not require separate services or separate LLM calls.
 
-## D020. U.S.-First, Global-Ready Geography
+## D020. U.S.-Jurisdiction, Global Biology
 
-The first jurisdiction implementation is U.S. federal plus Texas. Florida and Singapore follow by default. Architecture must stay global-ready.
+Protocol Two jurisdiction is U.S.-only: U.S. federal, Texas, and Florida are the implemented legal/regulatory packs. Plant taxonomy, germplasm, ranges, biomes, climate associations, crop uses, and scientific context may be global. Foreign legal packs are architecture-ready but not implemented until there is a concrete institutional/product need.
 
 ## D021. Jurisdiction Packs
 
-Jurisdiction packs are versioned adapter bundles. Movement checks may combine federal, origin, destination, and quarantine-specific rules. County difference alone must never determine legal status.
+Jurisdiction packs are versioned adapter bundles selected through a registry. Movement checks may combine federal, origin-state, destination-state, and quarantine-specific rules. County difference alone must never determine legal status.
 
 ## D022. Calendar Write Confirmation
 

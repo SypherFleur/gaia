@@ -12,6 +12,11 @@ APHIS_CITRUS_URL = "https://www.aphis.usda.gov/plant-pests-diseases/citrus-disea
 APHIS_IMPORT_URL = "https://www.aphis.usda.gov/plant-imports/how-to-import"
 TEXAS_CITRUS_URL = "https://texasagriculture.gov/Regulatory-Programs/Plant-Quality/Citrus-Information"
 TEXAS_GREENING_URL = "https://texasagriculture.gov/Regulatory-Programs/Plant-Quality/Pest-and-Disease-Alerts/Citrus-Greening"
+FDACS_PLANT_INSPECTION_URL = "https://www.fdacs.gov/Agriculture-Industry/Plants-and-Nurseries/Plant-Inspection"
+FDACS_CITRUS_QUARANTINE_URL = "https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Citrus-Health-Response-Program/Citrus-Quarantine-and-Disease-Detection-Maps"
+FDACS_IMPORT_REGULATIONS_URL = "https://www.fdacs.gov/Agriculture-Industry/Plant-Industry-Permits/Summary-of-Plant-Import-Regulations"
+FDACS_APPROVED_STRUCTURES_URL = "https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Citrus-Health-Response-Program/Growing-Citrus-in-Approved-Structures"
+FDACS_GALS_BROWARD_URL = "https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Invasive-Mollusks/Giant-African-Land-Snail/Broward-County-Quarantine-and-Treatment-Information"
 
 
 class FixtureAPHISProvider:
@@ -61,7 +66,7 @@ class FixtureAPHISProvider:
                 authority="USDA APHIS",
                 authority_level="federal",
                 jurisdiction="United States import",
-                regulated_taxa=[{"rank": "host_class", "name": "plants for planting"}],
+                regulated_taxa=[{"rank": "host_class", "name": "plants"}],
                 regulated_articles=["plants for planting", "seeds", "cuttings"],
                 plant_parts=["live plant", "seed", "cutting", "scion", "root"],
                 origin_scope={"country_code": "ANY_NON_US"},
@@ -232,6 +237,206 @@ class FixtureTexasAgricultureProvider:
         return await self.pest_alerts(request)
 
 
+class FixtureFloridaFDACSProvider:
+    provider_id = "florida-fdacs"
+
+    def __init__(self, *, unavailable: bool = False, stale: bool = False) -> None:
+        self.unavailable = unavailable
+        self.stale = stale
+        self.calls = 0
+        self.alert_calls = 0
+
+    async def resolve_zones(self, request: RegulationRequest) -> RegulationResponse:
+        self.calls += 1
+        if self.unavailable:
+            return RegulationResponse(provider_id=self.provider_id, status="PROVIDER_ERROR", freshness="UNAVAILABLE", warnings=["florida_fdacs_unavailable"])
+        freshness = "STALE" if self.stale else "CURRENT"
+        zones = [
+            RegulatoryZone(
+                zone_id="fl-citrus-statewide",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                zone_type="quarantine",
+                name="Florida citrus regulated area",
+                area_scope={"state_code": "FL"},
+                geometry_reference="fixture://fl/citrus-statewide",
+                freshness=freshness,
+            ),
+            RegulatoryZone(
+                zone_id="fl-citrus-black-spot-southwest",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                zone_type="quarantine",
+                name="Florida citrus black spot fixture polygon",
+                area_scope={"state_code": "FL", "counties": ["Collier", "Hendry", "Lee"], "geometry_relation": "partial_counties"},
+                geometry_reference="fixture://fl/cbs/southwest-polygon",
+                freshness=freshness,
+            ),
+            RegulatoryZone(
+                zone_id="fl-gals-broward",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                zone_type="quarantine",
+                name="Broward County giant African land snail quarantine fixture",
+                area_scope={"state_code": "FL", "counties": ["Broward"], "regulated_articles": ["plants", "plant parts", "plants in soil", "soil", "yard waste"]},
+                geometry_reference="fixture://fl/gals/broward",
+                freshness=freshness,
+            ),
+        ]
+        return RegulationResponse(
+            provider_id=self.provider_id,
+            status="AVAILABLE",
+            zones=zones,
+            freshness=freshness,
+            provenance=[_prov(self.provider_id, "fixture-fdacs-zones", FDACS_CITRUS_QUARANTINE_URL, "Florida Department of Agriculture and Consumer Services", {"zones": [zone.zone_id for zone in zones]})],
+        )
+
+    async def movement_rules(self, request: RegulationRequest) -> RegulationResponse:
+        zone_response = await self.resolve_zones(request)
+        if zone_response.status != "AVAILABLE":
+            return zone_response
+        freshness = zone_response.freshness
+        rules = [
+            RegulatoryRule(
+                rule_id="fdacs-citrus-entry-special-permit",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                authority_level="state",
+                jurisdiction="Florida",
+                regulated_taxa=[{"rank": "genus", "name": "Citrus"}],
+                regulated_articles=["citrus trees", "citrus plants", "citrus plant parts", "nursery stock"],
+                plant_parts=["live plant", "cutting", "scion", "root", "growing medium"],
+                pest_or_disease="citrus pests and diseases",
+                origin_scope={"state_code": "ANY", "exclude_state_code": "FL"},
+                destination_scope={"state_code": "FL"},
+                status_effect="RESTRICTED",
+                conditions=[{"requirement": "Citrus plants and plant parts from other states may not enter Florida except under special permit from the Division Director.", "authority": "FDACS Division of Plant Industry"}],
+                permits=[{"requirement": "Special permit from FDACS Division Director for citrus trees or plant parts entering Florida.", "authority": "FDACS Division of Plant Industry"}],
+                inspection=[{"requirement": "FDACS plant inspection or nursery certificate review may be required.", "authority": "FDACS Division of Plant Industry"}],
+                exceptions=[{"plant_part": "fruit", "condition": "USDA inspected and certified fruit is outside this live plant/plant-part fixture rule."}],
+                last_verified_at="2026-08-13T00:00:00+00:00",
+                freshness=freshness,
+                authority_metadata={"authority_id": "fl_fdacs_dpi", "binding_authority": True, "source_class": "binding_authority", "state_pack_interface": "USStateJurisdictionPack"},
+                source_reference=FDACS_IMPORT_REGULATIONS_URL,
+            ),
+            RegulatoryRule(
+                rule_id="fdacs-citrus-exit-certified-nursery",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                authority_level="state",
+                jurisdiction="Florida",
+                regulated_taxa=[{"rank": "genus", "name": "Citrus"}],
+                regulated_articles=["citrus plants", "citrus plant parts", "nursery stock"],
+                plant_parts=["live plant", "cutting", "scion", "root"],
+                pest_or_disease="citrus pests and diseases",
+                origin_scope={"state_code": "FL"},
+                destination_scope={"country_code": "US"},
+                status_effect="CONDITIONAL",
+                conditions=[{"requirement": "Citrus plants leaving Florida must originate from a nursery operating under FDACS compliance and be USDA certified where required.", "authority": "FDACS Division of Plant Industry"}],
+                permits=[{"requirement": "USDA certification and FDACS-compliant nursery identity/tagging must be maintained through movement.", "authority": "FDACS Division of Plant Industry"}],
+                inspection=[{"requirement": "Each citrus plant must be individually tagged at the nursery in the fixture rule.", "authority": "FDACS Division of Plant Industry"}],
+                exceptions=[{"plant_part": "fruit", "condition": "USDA inspected and certified fruit is handled by separate fruit-shipping procedures."}],
+                last_verified_at="2026-08-13T00:00:00+00:00",
+                freshness=freshness,
+                authority_metadata={"authority_id": "fl_fdacs_dpi", "binding_authority": True, "source_class": "binding_authority", "state_pack_interface": "USStateJurisdictionPack"},
+                source_reference=FDACS_CITRUS_QUARANTINE_URL,
+            ),
+            RegulatoryRule(
+                rule_id="fdacs-citrus-greening-approved-structure",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                authority_level="state",
+                jurisdiction="Florida",
+                regulated_taxa=[{"rank": "genus", "name": "Citrus"}, {"rank": "species", "name": "Murraya paniculata"}, {"rank": "species", "name": "Murraya koenigii"}],
+                regulated_articles=["citrus greening host plants", "citrus propagations", "orange jasmine", "curry leaf"],
+                plant_parts=["live plant", "cutting", "scion", "root"],
+                pest_or_disease="citrus greening",
+                origin_scope={"state_code": "FL"},
+                destination_scope={"country_code": "US"},
+                status_effect="CONDITIONAL",
+                conditions=[{"requirement": "Citrus greening host propagations must be produced in FDACS-approved insect-proof structures; non-compliant host material is prohibited from movement.", "authority": "FDACS Division of Plant Industry"}],
+                permits=[{"requirement": "Approved structure and site compliance under Florida citrus greening host rules.", "authority": "FDACS Division of Plant Industry"}],
+                last_verified_at="2026-08-13T00:00:00+00:00",
+                freshness=freshness,
+                authority_metadata={"authority_id": "fl_fdacs_dpi", "binding_authority": True, "source_class": "binding_authority", "state_pack_interface": "USStateJurisdictionPack"},
+                source_reference=FDACS_APPROVED_STRUCTURES_URL,
+            ),
+            RegulatoryRule(
+                rule_id="fdacs-aquatic-plant-import-permit",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                authority_level="state",
+                jurisdiction="Florida",
+                regulated_taxa=[{"rank": "host_class", "name": "aquatic plants"}],
+                regulated_articles=["aquatic plants", "aquatic plant seeds"],
+                plant_parts=["live plant", "seed"],
+                pest_or_disease="non-native aquatic plants",
+                origin_scope={"state_code": "ANY"},
+                destination_scope={"state_code": "FL"},
+                status_effect="CONDITIONAL",
+                permits=[{"requirement": "Permit may be required before importing non-native aquatic plants or seed into Florida.", "authority": "Florida Department of Environmental Protection"}],
+                last_verified_at="2026-08-13T00:00:00+00:00",
+                freshness=freshness,
+                authority_metadata={"authority_id": "fl_dep_invasive_plants", "binding_authority": True, "source_class": "binding_authority", "state_pack_interface": "USStateJurisdictionPack"},
+                source_reference=FDACS_IMPORT_REGULATIONS_URL,
+            ),
+            RegulatoryRule(
+                rule_id="fdacs-gals-broward-regulated-articles",
+                jurisdiction_pack="us_fl",
+                authority="Florida Department of Agriculture and Consumer Services",
+                authority_level="state",
+                jurisdiction="Broward County giant African land snail quarantine fixture",
+                regulated_taxa=[{"rank": "host_class", "name": "plants for planting"}],
+                regulated_articles=["plants", "plant parts", "plants in soil", "soil", "yard waste"],
+                plant_parts=["live plant", "soil", "growing medium"],
+                pest_or_disease="giant African land snail",
+                origin_scope={"quarantine_zone": "fl-gals-broward"},
+                destination_scope={"state_code": "FL"},
+                status_effect="RESTRICTED",
+                conditions=[{"requirement": "Regulated articles may not move within, through, or from the quarantine area without a compliance agreement.", "authority": "FDACS Division of Plant Industry"}],
+                permits=[{"requirement": "Compliance agreement for applicable regulated article movement.", "authority": "FDACS Division of Plant Industry"}],
+                reporting=[{"requirement": "Preserve evidence and contact FDACS DPI for suspected giant African land snail regulated articles.", "authority": "FDACS Division of Plant Industry"}],
+                last_verified_at="2026-08-13T00:00:00+00:00",
+                freshness=freshness,
+                authority_metadata={"authority_id": "fl_fdacs_dpi", "binding_authority": True, "source_class": "binding_authority", "state_pack_interface": "USStateJurisdictionPack"},
+                source_reference=FDACS_GALS_BROWARD_URL,
+            ),
+        ]
+        return RegulationResponse(
+            provider_id=self.provider_id,
+            status="AVAILABLE",
+            rules=rules,
+            zones=zone_response.zones,
+            freshness=freshness,
+            provenance=[
+                *zone_response.provenance,
+                _prov(self.provider_id, "fixture-fdacs-citrus-rules", FDACS_IMPORT_REGULATIONS_URL, "Florida Department of Agriculture and Consumer Services", {"rules": [rule.rule_id for rule in rules]}),
+            ],
+        )
+
+    async def pest_alerts(self, request: RegulationRequest) -> RegulationResponse:
+        self.alert_calls += 1
+        if self.unavailable:
+            return RegulationResponse(provider_id=self.provider_id, status="PROVIDER_ERROR", freshness="UNAVAILABLE", warnings=["florida_fdacs_alerts_unavailable"])
+        freshness = "STALE" if self.stale else "CURRENT"
+        return RegulationResponse(
+            provider_id=self.provider_id,
+            status="AVAILABLE",
+            alerts=[
+                {"pest_or_disease": "citrus greening", "regulated": True, "authority": "Florida Department of Agriculture and Consumer Services"},
+                {"pest_or_disease": "giant African land snail", "regulated": True, "authority": "Florida Department of Agriculture and Consumer Services"},
+            ],
+            reporting_requirements=[
+                {"authority": "Florida Department of Agriculture and Consumer Services", "instruction": "Preserve photos, location context, plant material, soil/growing-media context, and contact FDACS DPI for suspected regulated plant pest or disease."}
+            ],
+            freshness=freshness,
+            provenance=[_prov(self.provider_id, "fixture-fdacs-alerts", FDACS_PLANT_INSPECTION_URL, "Florida Department of Agriculture and Consumer Services", {"alerts": ["citrus greening", "giant African land snail"]})],
+        )
+
+    async def reporting_requirements(self, request: RegulationRequest) -> RegulationResponse:
+        return await self.pest_alerts(request)
+
+
 @dataclass(slots=True)
 class ReadOnlyRegulatoryPageAdapter:
     provider_id: str
@@ -273,4 +478,3 @@ def _prov(provider_id: str, record_id: str, url: str, authority: str, payload: o
         attribution=authority,
         content_hash=content_hash(payload),
     )
-

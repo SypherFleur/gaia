@@ -17,13 +17,34 @@ property or facility context
 
 County boundaries are one layer only. GAIA must not encode plant movement as `origin_county != destination_county`.
 
-## Phase 8 Packs
+## Phase 12 Pack Contract
+
+Every pack has:
+
+```text
+JurisdictionPackMetadata
+- pack_id
+- version
+- display_name
+- country_code
+- authority_ids
+- source_urls
+- enabled
+- legal_scope
+- freshness_required
+```
+
+U.S. state packs use `USStateJurisdictionPack` and add `state_code`. A future state should be addable through the pack registry without editing Atlas, Botanist, Season, Mercator, or the Sentinel rule engine.
+
+## Phase 12 Packs
 
 `us_federal` covers APHIS fixture rules for citrus-related federal movement and plant import context.
 
 `us_tx` covers Texas Department of Agriculture fixture rules for citrus movement, citrus zone context, and citrus greening quarantine context.
 
-`us_fl_fixture` and `sg_fixture` are declared in tests to prove the pack abstraction remains extensible, but comprehensive rules are deferred.
+`us_fl` covers Florida FDACS fixture rules for citrus movement, nursery-stock context, approved citrus structures, aquatic plant permit context, and Broward giant African land snail regulated articles.
+
+`sg_fixture` remains an extensibility fixture only. Protocol Two does not implement foreign legal jurisdiction.
 
 ## Geometry
 
@@ -39,3 +60,10 @@ Initial official sources checked on 2026-08-11:
 - Texas citrus greening information: https://texasagriculture.gov/Regulatory-Programs/Plant-Quality/Pest-and-Disease-Alerts/Citrus-Greening
 - Texas quarantines landing page: https://texasagriculture.gov/Regulatory-Programs/Quarantines
 
+Florida official sources checked on 2026-08-13:
+
+- FDACS Plant Inspection: https://www.fdacs.gov/Agriculture-Industry/Plants-and-Nurseries/Plant-Inspection
+- FDACS Citrus Quarantine and Disease Detection Maps: https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Citrus-Health-Response-Program/Citrus-Quarantine-and-Disease-Detection-Maps
+- FDACS Summary of Plant Import Regulations: https://www.fdacs.gov/Agriculture-Industry/Plant-Industry-Permits/Summary-of-Plant-Import-Regulations
+- FDACS Growing Citrus in Approved Structures: https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Citrus-Health-Response-Program/Growing-Citrus-in-Approved-Structures
+- FDACS Broward County giant African land snail quarantine information: https://www.fdacs.gov/Agriculture-Industry/Pests-and-Diseases/Plant-Pests-and-Diseases/Invasive-Mollusks/Giant-African-Land-Snail/Broward-County-Quarantine-and-Treatment-Information

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Phase 12 U.S. jurisdiction hardening with registry-backed jurisdiction packs, normalized authority metadata, `USStateJurisdictionPack`, fixture-backed Florida FDACS rules, expanded interstate movement matrix tests, non-U.S. legal movement fail-closed behavior, and regulated-pest alert provider invocation.
+- Added Phase 12 global biological profile fields for native/introduced ranges, biomes, ecoregions, climate associations, crop origin, crop/food/forage/ornamental uses, occurrence/research source hooks, and germplasm links.
+- Added migration `0012_phase12_jurisdiction_biology_cli.sql` for expanded `plant_profiles`.
+- Added FDACS source documentation and updated Sentinel/Botanist/jurisdiction-pack docs for the U.S.-jurisdiction/global-biology boundary.
 - Added Phase 11 institutional foundation with research projects/runs, reproducibility bundles, dataset/version registry, knowledge collections, local document ingestion, organization policy, model/tool allowlists, human review, exports, model comparison, evaluation records, and sovereign policy support.
 - Added migration `0011_institutional_research_foundation.sql` for institutional research, datasets, knowledge, review, policy, comparison, evaluation, and audit export persistence.
 - Added Phase 11 tests covering reproducibility, dataset immutability, tenant isolation, knowledge retrieval isolation, injection handling, policy enforcement, export hashes/secrets, model comparison, human review, retention/deletion, and sovereign boot smoke.

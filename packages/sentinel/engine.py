@@ -91,7 +91,7 @@ def _taxon_matches(regulated_taxa: list[JsonDict], species: str | None) -> bool:
             return True
         if rank == "species" and normalized == name:
             return True
-        if rank == "host_class" and name in {"plants for planting", "citrus"}:
+        if rank == "host_class" and name in {"plants for planting", "plants", "citrus"}:
             return True
     return False
 
@@ -118,16 +118,25 @@ def _scope_matches(scope: JsonDict, geo: JsonDict, request: JsonDict, side: str)
     if scope.get("country_code") == "ANY_NON_US" and country == "US":
         return False
     if scope.get("state_code") == "ANY":
-        return True
+        return state != scope.get("exclude_state_code")
     if scope.get("state_code") and state != scope["state_code"]:
+        return False
+    if scope.get("exclude_state_code") and state == scope["exclude_state_code"]:
         return False
     counties = scope.get("counties")
     if counties and county not in counties:
         return False
     quarantine_zone = scope.get("quarantine_zone")
     zones = geo.get("quarantine_zones", []) + geo.get("pest_zones", []) + geo.get("regulatory_zones", [])
+    zone_text = " ".join(str(zone).lower() for zone in zones)
     if quarantine_zone == "tx-hlb":
         return any("Gulf Coast" in zone or "Citrus Greening" in zone for zone in zones)
+    if quarantine_zone == "fl-gals-broward":
+        return "broward" in zone_text and "giant african land snail" in zone_text
+    if quarantine_zone == "fl-citrus-statewide":
+        return state == "FL" and "citrus" in zone_text
     if quarantine_zone == "citrus":
         return bool(zones) or state in {"TX", "FL", "CA", "AZ"}
+    if quarantine_zone:
+        return str(quarantine_zone).lower() in zone_text
     return True

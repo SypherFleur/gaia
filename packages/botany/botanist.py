@@ -50,6 +50,7 @@ class BotanistService:
         self.tool_gateway = tool_gateway
         self.taxonomy_tool = taxonomy_tool
         self.germplasm_tool = germplasm_tool
+        self._taxon_global_context: dict[str, JsonDict] = {}
 
     async def resolve_taxon(self, context: ToolExecutionContext, query: str) -> TaxonLookupResult:
         result = await self.tool_gateway.execute(
@@ -66,9 +67,11 @@ class BotanistService:
         )
         source_record_ids = self._persist_sources(context.organization_id, result.provenance)
         data = result.data
+        canonical_taxon_id = data.get("canonical_taxon_id")
+        if canonical_taxon_id:
+            self._taxon_global_context[canonical_taxon_id] = _global_context_from_taxonomy_data(data, source_record_ids)
         if result.status in {"AMBIGUOUS", "UNRESOLVED", "PROVIDER_ERROR", "denied", "failed"}:
             return TaxonLookupResult(result.status, None, data, source_record_ids, result.warnings)
-        canonical_taxon_id = data.get("canonical_taxon_id")
         plant_entity = None
         if canonical_taxon_id:
             existing = self.repository.find_plant_entity_by_taxon_id(canonical_taxon_id)
@@ -114,9 +117,11 @@ class BotanistService:
         organization_id: str,
         plant_entity: PlantEntity,
         *,
+        germplasm_links: list[JsonDict] | None = None,
         extra_conflicts: list[JsonDict] | None = None,
     ) -> PlantProfile:
         source_ids = plant_entity.source_ids
+        global_context = self._taxon_global_context.get(plant_entity.canonical_taxon_id or "", {})
         field_provenance = {
             "scientific_name": _field_provenance(plant_entity.scientific_name, plant_entity.canonical_name_source_record_id, "gbif"),
             "family": _field_provenance(plant_entity.family, plant_entity.canonical_name_source_record_id, "gbif"),
@@ -124,7 +129,37 @@ class BotanistService:
             "species": _field_provenance(plant_entity.species, plant_entity.canonical_name_source_record_id, "gbif"),
             "common_names": _field_provenance(plant_entity.common_names, plant_entity.canonical_name_source_record_id, "gbif"),
         }
-        known = sum(1 for value in [plant_entity.scientific_name, plant_entity.family, plant_entity.genus, plant_entity.species] if value)
+        for field_name in [
+            "native_range",
+            "introduced_range",
+            "biomes",
+            "ecoregions",
+            "climate_associations",
+            "crop_origin",
+            "plant_traits",
+            "agricultural_uses",
+            "occurrence_sources",
+            "research_sources",
+        ]:
+            if global_context.get(field_name):
+                field_provenance[field_name] = _field_provenance(global_context[field_name], plant_entity.canonical_name_source_record_id, "gbif")
+        traits = global_context.get("plant_traits", {})
+        uses = global_context.get("agricultural_uses", {})
+        climate = global_context.get("climate_associations", {})
+        known = sum(
+            1
+            for value in [
+                plant_entity.scientific_name,
+                plant_entity.family,
+                plant_entity.genus,
+                plant_entity.species,
+                global_context.get("native_range"),
+                global_context.get("biomes"),
+                climate,
+                uses,
+            ]
+            if value
+        )
         profile = PlantProfile(
             organization_id=organization_id,
             plant_entity_id=plant_entity.id,
@@ -138,12 +173,31 @@ class BotanistService:
                 "synonyms": plant_entity.synonyms,
             },
             common_names=plant_entity.common_names,
+            native_range=global_context.get("native_range", []),
+            introduced_range=global_context.get("introduced_range", []),
+            biomes=global_context.get("biomes", []),
+            ecoregions=global_context.get("ecoregions", []),
+            climate_associations=climate,
             crop_group=plant_entity.crop_group,
+            crop_origin=global_context.get("crop_origin", {}),
+            growth_habit=traits.get("growth_habit"),
+            lifecycle=traits.get("lifecycle"),
+            crop_use={"values": uses.get("crop_use", []), "source": "gbif_fixture"} if uses.get("crop_use") else {},
+            food_use={"values": uses.get("food_use", []), "source": "gbif_fixture"} if uses.get("food_use") else {},
+            forage_use={"values": uses.get("forage_use", []), "source": "gbif_fixture"} if uses.get("forage_use") else {},
+            ornamental_use={"values": uses.get("ornamental_use", []), "source": "gbif_fixture"} if uses.get("ornamental_use") else {},
+            temperature_associations={"value": climate.get("temperature"), "source": "gbif_fixture"} if climate.get("temperature") else {},
+            water_associations={"value": climate.get("moisture"), "source": "gbif_fixture"} if climate.get("moisture") else {},
+            temperature_context={"association": climate.get("temperature"), "source": "gbif_fixture"} if climate.get("temperature") else {},
+            water_context={"association": climate.get("moisture"), "source": "gbif_fixture"} if climate.get("moisture") else {},
+            germplasm_links=germplasm_links or [],
+            occurrence_sources=global_context.get("occurrence_sources", []),
+            research_sources=global_context.get("research_sources", []),
             field_provenance=field_provenance,
             conflicts=extra_conflicts or [],
             source_record_ids=source_ids,
-            confidence={"taxonomy": "source-backed", "traits": "mostly unknown"},
-            completeness=known / 8.0,
+            confidence={"taxonomy": "source-backed", "global_context": "source-backed when populated", "traits": "unknown unless populated by provider fixture"},
+            completeness=known / 12.0,
         )
         self.repository.create_plant_profile(profile)
         return profile
@@ -226,15 +280,37 @@ def _field_provenance(value: Any, source_record_id: str | None, provider: str) -
     return {"value": value, "source_record_id": source_record_id, "provider": provider}
 
 
+def _global_context_from_taxonomy_data(data: JsonDict, source_record_ids: list[str]) -> JsonDict:
+    context = {
+        "native_range": data.get("native_range", []),
+        "introduced_range": data.get("introduced_range", []),
+        "biomes": data.get("biomes", []),
+        "ecoregions": data.get("ecoregions", []),
+        "climate_associations": data.get("climate_associations", {}),
+        "crop_origin": data.get("crop_origin", {}),
+        "plant_traits": data.get("plant_traits", {}),
+        "agricultural_uses": data.get("agricultural_uses", {}),
+        "occurrence_sources": data.get("occurrence_sources", []),
+        "research_sources": data.get("research_sources", []),
+    }
+    if any(context.values()):
+        context["source_record_ids"] = source_record_ids
+    return context
+
+
 def _crop_group_for(data: JsonDict) -> str | None:
     names = {name.lower() for name in data.get("common_names", [])}
     if "tomato" in names:
         return "vegetable"
+    if "cowpea" in names:
+        return "pulse"
     return None
 
 
 def _edible_classification_for(data: JsonDict) -> str | None:
     names = {name.lower() for name in data.get("common_names", [])}
     if "tomato" in names:
+        return "edible"
+    if "cowpea" in names or "black-eyed pea" in names:
         return "edible"
     return None

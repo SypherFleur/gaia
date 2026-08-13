@@ -8,6 +8,7 @@ from packages.domain import MovementDecision, MovementRequest, SourceRecord
 from packages.persistence import GaiaRepository
 from packages.provenance import ProvenanceRecord
 from packages.sentinel.engine import aggregate_status, detect_conflicts, rule_matches
+from packages.sentinel.packs import JurisdictionPackRegistry, legacy_registry
 from packages.sentinel.tools import RegulationMovementRulesTool, RegulationPestAlertsTool
 from packages.tools import ToolExecutionContext, ToolGateway, ToolRequest, ToolResult
 
@@ -37,7 +38,8 @@ class SentinelService:
         tool_gateway: ToolGateway,
         context_compiler: ContextCompiler,
         federal_tool: RegulationMovementRulesTool,
-        texas_tool: RegulationMovementRulesTool,
+        texas_tool: RegulationMovementRulesTool | None = None,
+        jurisdiction_registry: JurisdictionPackRegistry | None = None,
         alert_tools: list[RegulationPestAlertsTool] | None = None,
     ) -> None:
         self.repository = repository
@@ -45,6 +47,7 @@ class SentinelService:
         self.context_compiler = context_compiler
         self.federal_tool = federal_tool
         self.texas_tool = texas_tool
+        self.jurisdiction_registry = jurisdiction_registry or legacy_registry(federal_tool, texas_tool)
         self.alert_tools = alert_tools or []
 
     async def check_movement(
@@ -111,9 +114,11 @@ class SentinelService:
             "planned_date": movement_request.planned_date,
             "metadata": movement_request.metadata,
         }
-        tools = [self.federal_tool]
-        if (destination_geo.get("state_code") == "TX") or (origin_geo.get("state_code") == "TX"):
-            tools.append(self.texas_tool)
+        if not _movement_touches_us(origin_geo, destination_geo, movement_request):
+            unresolved.append("non_us_jurisdiction_not_implemented")
+        tools = self.jurisdiction_registry.movement_tools_for(origin_geo, destination_geo, request_payload)
+        if _movement_touches_us(origin_geo, destination_geo, movement_request) and not tools:
+            unresolved.append("us_jurisdiction_pack_unavailable")
         provider_results = []
         source_record_ids = []
         rules = []
@@ -175,6 +180,41 @@ class SentinelService:
         )
 
     async def regulated_pest_context(self, context: ToolExecutionContext, *, species: str | None, location_id: str | None, visual_hypothesis: str) -> MovementDecision:
+        location_geo = {}
+        if location_id:
+            location_geo = asdict((await self.context_compiler.build_geography_context(context, location_id)).geo_context)
+        alert_results: list[ToolResult] = []
+        alert_source_ids: list[str] = []
+        alert_reporting: list[JsonDict] = []
+        alert_tools = self.alert_tools or self.jurisdiction_registry.pest_alert_tools_for(location_geo.get("country_code"), location_geo.get("state_code"))
+        alert_payload = {
+            "origin": _safe_geo(location_geo, None),
+            "destination": _safe_geo(location_geo, None),
+            "species": species,
+            "plant_part": "live plant",
+            "live_plant": True,
+            "soil_attached": False,
+            "planned_date": None,
+            "metadata": {"visual_hypothesis": visual_hypothesis, "vision_status": "hypothesis_not_diagnosis"},
+        }
+        for tool in alert_tools:
+            result = await self.tool_gateway.execute(
+                tool,
+                context,
+                ToolRequest(
+                    payload={**alert_payload, "jurisdiction_pack": _pack_for_tool(tool.provider_id)},
+                    cache_key=f"sentinel-alert:{tool.provider_id}:{species}:{location_geo.get('state_code')}:{visual_hypothesis}",
+                    cache_ttl_seconds=3600,
+                    stale_if_error_seconds=86400,
+                    allow_stale_cache=True,
+                    estimated_cost_usd=0.0,
+                    contains_exact_location=False,
+                    regulatory_current_required=True,
+                ),
+            )
+            alert_results.append(result)
+            alert_source_ids.extend(self._persist_sources(context.organization_id, result.provenance))
+            alert_reporting.extend(result.data.get("reporting_requirements", []))
         decision = await self.check_movement(
             context,
             origin_location_id=location_id,
@@ -185,6 +225,11 @@ class SentinelService:
             purpose="regulated pest alert",
             metadata={"visual_hypothesis": visual_hypothesis, "vision_status": "hypothesis_not_diagnosis"},
         )
+        decision.source_record_ids = sorted(set(decision.source_record_ids + alert_source_ids))
+        decision.reporting_requirements.extend(alert_reporting)
+        for result in alert_results:
+            if result.status not in {"AVAILABLE", "success", "cache_hit"}:
+                decision.unresolved_questions.append(f"{result.data.get('provider_id', 'pest_alert_provider')}_alert_source_unavailable")
         decision.reporting_requirements.append(
             {
                 "authority": "Sentinel",
@@ -282,7 +327,17 @@ def _safe_geo(geo: JsonDict, fallback_country: str | None) -> JsonDict:
 def _pack_for_tool(provider_id: str) -> str:
     if provider_id == "texas-agriculture":
         return "us_tx"
+    if provider_id == "florida-fdacs":
+        return "us_fl"
     return "us_federal"
+
+
+def _movement_touches_us(origin_geo: JsonDict, destination_geo: JsonDict, request: MovementRequest) -> bool:
+    countries = {
+        origin_geo.get("country_code") or request.source_country,
+        destination_geo.get("country_code") or request.destination_country,
+    }
+    return "US" in countries
 
 
 def _geo_fingerprint(geo: JsonDict) -> str:

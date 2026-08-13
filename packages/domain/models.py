@@ -956,9 +956,23 @@ class PlantProfile(EntityMetadata):
     version: int = 1
     taxonomy: JsonDict = field(default_factory=dict)
     common_names: list[str] = field(default_factory=list)
+    native_range: list[JsonDict] = field(default_factory=list)
+    introduced_range: list[JsonDict] = field(default_factory=list)
+    biomes: list[str] = field(default_factory=list)
+    ecoregions: list[JsonDict] = field(default_factory=list)
+    climate_associations: JsonDict = field(default_factory=dict)
     crop_group: str | None = None
+    crop_origin: JsonDict = field(default_factory=dict)
     growth_habit: str | None = None
     lifecycle: str | None = None
+    crop_use: JsonDict = field(default_factory=dict)
+    food_use: JsonDict = field(default_factory=dict)
+    forage_use: JsonDict = field(default_factory=dict)
+    ornamental_use: JsonDict = field(default_factory=dict)
+    soil_associations: JsonDict = field(default_factory=dict)
+    water_associations: JsonDict = field(default_factory=dict)
+    light_associations: JsonDict = field(default_factory=dict)
+    temperature_associations: JsonDict = field(default_factory=dict)
     temperature_context: JsonDict = field(default_factory=dict)
     water_context: JsonDict = field(default_factory=dict)
     soil_context: JsonDict = field(default_factory=dict)
@@ -967,6 +981,8 @@ class PlantProfile(EntityMetadata):
     known_pest_links: list[JsonDict] = field(default_factory=list)
     known_disease_links: list[JsonDict] = field(default_factory=list)
     germplasm_links: list[JsonDict] = field(default_factory=list)
+    occurrence_sources: list[JsonDict] = field(default_factory=list)
+    research_sources: list[JsonDict] = field(default_factory=list)
     field_provenance: JsonDict = field(default_factory=dict)
     conflicts: list[JsonDict] = field(default_factory=list)
     source_record_ids: list[str] = field(default_factory=list)

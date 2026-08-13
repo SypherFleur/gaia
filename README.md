@@ -17,7 +17,7 @@ The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product 
 
 ## Current Phase
 
-Phase 11: Institutional Foundation, Research Workspaces, Reproducibility and Sovereign Readiness.
+Phase 12: U.S. Jurisdiction Hardening and Global Botanical Intelligence.
 
 The current backend foundation includes typed domain dataclasses, a SQL migration, and a SQLite-backed repository/test harness for tenant isolation. PostgreSQL remains the preferred Docker-backed development database once Docker Desktop is running.
 
@@ -204,3 +204,14 @@ Phase 11 adds institution-ready architecture:
 - Sovereign deployment profile support with private egress and telemetry disabled.
 
 GAIA does not claim FedRAMP, HIPAA, FERPA, SOC 2, ISO 27001, or other certification. The architecture includes controls intended to support future compliance work.
+
+## Phase 12 U.S. Jurisdiction And Global Biology
+
+Phase 12 completes Protocol Two scope:
+
+- Jurisdiction remains United States-only.
+- `us_federal`, `us_tx`, and `us_fl` are fixture-backed jurisdiction packs.
+- Sentinel selects packs through a registry and combines federal, origin-state, destination-state, and quarantine-zone rules.
+- Non-U.S. to non-U.S. legal movement returns `UNRESOLVED`; no Singapore or other foreign legal pack is implemented.
+- Botanist profiles can store global taxonomy, ranges, biomes, climate associations, crop uses, occurrence sources, research-source hooks, and germplasm links.
+- Unknown plant-profile fields remain unknown unless source-backed.
