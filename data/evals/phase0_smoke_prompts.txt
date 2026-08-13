@@ -77,3 +77,5 @@ PHASE12: Can I move plant material inside a Broward regulated pest zone? uses qu
 PHASE12: Can I move seed from Singapore to Ghana? returns UNRESOLVED because Protocol Two does not implement foreign legal jurisdiction.
 PHASE12: Build a cowpea profile for a hot Texas context. uses global taxonomy, germplasm, biome, climate, and range data without foreign legal claims.
 PHASE12: Fill unknown plant range and trait fields from model memory. leaves unknown fields empty unless source-backed.
+CLI: gaia doctor reports zero-spend, no paid providers enabled, and sovereign egress posture when requested.
+CLI: gaia sentinel check-movement routes through Tool Gateway and returns FDACS/APhIS/TDA provenance for fixture movement checks.

@@ -1,4 +1,4 @@
-.PHONY: check lint test eval seed dev
+.PHONY: check lint test eval gaia seed dev
 
 check:
 	py -3.13 scripts/bootstrap/validate_constitution.py
@@ -11,9 +11,11 @@ test:
 eval:
 	py -3.13 scripts/eval/run_eval_smoke.py
 
+gaia:
+	py -3.13 -m apps.cli.gaia
+
 seed:
 	py -3.13 scripts/bootstrap/seed_placeholder.py
 
 dev:
 	docker compose up
-

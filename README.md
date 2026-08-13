@@ -48,6 +48,7 @@ npm run check
 npm run test
 npm run lint
 npm run eval
+npm run gaia -- doctor
 ```
 
 Optional local Ollama smoke:
@@ -59,6 +60,21 @@ py -3.13 -m unittest tests.phase4.test_ollama_smoke
 ```
 
 Unix-like convenience commands are mirrored in `Makefile`.
+
+## GAIA CLI
+
+The local CLI is available through:
+
+```powershell
+py -3.13 -m apps.cli.gaia doctor
+npm run gaia -- cost status
+npm run gaia -- providers list
+npm run gaia -- eval run
+npm run gaia -- sentinel check-movement --origin tx-houston --destination fl-orlando --species "Citrus sinensis" --plant-part "live plant" --live-plant
+npm run gaia -- botanist taxon --query cowpea
+```
+
+The CLI uses local fixture providers by default, routes reads through GAIA gateways, keeps paid usage disabled, and stores default local state under ignored `local_data/`.
 
 Docker is installed on the inspected machine, but Docker Desktop was not running during initial validation.
 
