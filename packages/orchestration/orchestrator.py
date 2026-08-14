@@ -14,6 +14,7 @@ from packages.model_gateway import (
     validate_guidance_plan_draft,
 )
 from packages.mercator import MercatorContextProvider
+from packages.orchestration.guidance_graph import GuidanceWorkflowGraph
 from packages.persistence import GaiaRepository
 from packages.season import SeasonContextProvider, SeasonPlanRequest, SeasonService
 from packages.tools import ToolExecutionContext
@@ -59,13 +60,14 @@ class GaiaOrchestrator:
         self.season = season
         self.season_context_provider = season_context_provider
         self.mercator_context_provider = mercator_context_provider
+        self.guidance_graph = GuidanceWorkflowGraph(self)
 
     async def handle_chat(
         self,
         context: ToolExecutionContext,
         *,
         message: str,
-        location_id: str,
+        location_id: str | None,
         user_plant_id: str | None = None,
         conversation_id: str | None = None,
     ) -> ChatResult:
@@ -79,28 +81,33 @@ class GaiaOrchestrator:
                 metadata={"untrusted_user_input": True},
             )
         )
-        route = classify_route(message)
-        if route == "geography":
-            return await self._handle_geography(context, conversation.id, user_message.id, location_id)
-        if route == "environment":
-            return await self._handle_environment(context, conversation.id, user_message.id, location_id)
-        if route == "economics" and self.mercator_context_provider is not None:
-            return await self._handle_economics(context, conversation.id, user_message.id, location_id, message, user_plant_id)
-        if route == "season" and self.season is not None and self.season_context_provider is not None:
-            return await self._handle_season(context, conversation.id, user_message.id, location_id, message)
-        return await self._handle_reasoning(context, conversation.id, user_message.id, location_id, message, user_plant_id)
+        return await self.guidance_graph.run(
+            context=context,
+            conversation_id=conversation.id,
+            user_message_id=user_message.id,
+            message=message,
+            location_id=location_id,
+            user_plant_id=user_plant_id,
+        )
+
+    def graph_summary(self) -> dict:
+        return self.guidance_graph.summary().to_dict()
 
     async def _handle_geography(
         self,
         context: ToolExecutionContext,
         conversation_id: str,
         user_message_id: str,
-        location_id: str,
+        location_id: str | None,
     ) -> ChatResult:
+        if location_id is None:
+            return self._location_required(context, conversation_id, user_message_id, "geography")
         bundle = await self.context_compiler.build_geography_context(context, location_id)
         geo = bundle.geo_context
         place = ", ".join(part for part in [geo.county_or_district, geo.state_or_region, geo.country] if part)
-        content = f"Your selected location resolves to {place}."
+        location = self.repository.get_location(context.organization_id, location_id) or {}
+        qualifier = _location_qualifier(location)
+        content = f"{qualifier} resolves to {place}."
         assistant_message = self.repository.create_message(
             Message(
                 organization_id=context.organization_id,
@@ -130,10 +137,12 @@ class GaiaOrchestrator:
         context: ToolExecutionContext,
         conversation_id: str,
         user_message_id: str,
-        location_id: str,
+        location_id: str | None,
         message: str,
         user_plant_id: str | None = None,
     ) -> ChatResult:
+        if location_id is None:
+            return self._location_required(context, conversation_id, user_message_id, "economics")
         geography_bundle = await self.context_compiler.build_geography_context(context, location_id)
         geography = geography_bundle.to_dict()["geo_context"]
         commodity = _extract_crops(message)[0]
@@ -191,8 +200,10 @@ class GaiaOrchestrator:
         context: ToolExecutionContext,
         conversation_id: str,
         user_message_id: str,
-        location_id: str,
+        location_id: str | None,
     ) -> ChatResult:
+        if location_id is None:
+            return self._location_required(context, conversation_id, user_message_id, "environment")
         bundle = await self.context_compiler.build_environmental_context(context, location_id)
         snapshot = bundle.environmental_snapshot
         geo = bundle.geo_context
@@ -245,10 +256,12 @@ class GaiaOrchestrator:
         context: ToolExecutionContext,
         conversation_id: str,
         user_message_id: str,
-        location_id: str,
+        location_id: str | None,
         message: str,
         user_plant_id: str | None = None,
     ) -> ChatResult:
+        if location_id is None:
+            return self._location_required(context, conversation_id, user_message_id, "reasoning")
         bundle = await self.context_compiler.build_environmental_context(context, location_id)
         if user_plant_id is not None and self.botanist is not None:
             botanist_context = await self.botanist.build_context(context, user_plant_id)
@@ -373,9 +386,11 @@ class GaiaOrchestrator:
         context: ToolExecutionContext,
         conversation_id: str,
         user_message_id: str,
-        location_id: str,
+        location_id: str | None,
         message: str,
     ) -> ChatResult:
+        if location_id is None:
+            return self._location_required(context, conversation_id, user_message_id, "season")
         crops = _extract_crops(message)
         request = SeasonPlanRequest(
             workspace_id=context.workspace_id,
@@ -447,12 +462,45 @@ class GaiaOrchestrator:
             validation_error=reason,
         )
 
+    def _location_required(
+        self,
+        context: ToolExecutionContext,
+        conversation_id: str,
+        user_message_id: str,
+        attempted_route: str,
+    ) -> ChatResult:
+        content = (
+            "No active real location is set. Use browser geolocation with permission, enter a location, "
+            "or select a saved location before GAIA resolves local guidance."
+        )
+        assistant_message = self.repository.create_message(
+            Message(
+                organization_id=context.organization_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                route="location_required",
+                metadata={"attempted_route": attempted_route, "model_run_count": 0},
+            )
+        )
+        return ChatResult(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            route="location_required",
+            content=content,
+            source_record_ids=[],
+            model_run_ids=[],
+            model_run_count=0,
+            provider_diagnostics={"location": {"status": "missing", "attempted_route": attempted_route}},
+        )
+
     def _ensure_conversation(
         self,
         context: ToolExecutionContext,
         conversation_id: str | None,
         message: str,
-        location_id: str,
+        location_id: str | None,
         user_plant_id: str | None,
     ) -> Conversation:
         if conversation_id is not None:
@@ -540,3 +588,15 @@ def _render_guidance_plan(plan: GuidancePlan) -> str:
     summary = first_recommendation.get("summary") if isinstance(first_recommendation, dict) else str(first_recommendation)
     action = plan.actions[0].get("title") if plan.actions and isinstance(plan.actions[0], dict) else "Review the plan details."
     return f"{plan.subject}: {summary}\nAction: {action}\nConfidence: {plan.uncertainty.get('level', 'uncertain')}"
+
+
+def _location_qualifier(location: dict) -> str:
+    source_kind = str(location.get("source_kind") or "saved")
+    label = str(location.get("label") or "location")
+    if source_kind == "device":
+        return f"Your device-approved location ({label})"
+    if source_kind == "manual":
+        return f"Your manually entered location ({label})"
+    if source_kind == "demo_fixture" or location.get("is_demo"):
+        return f"Your selected demo fixture location ({label}), not current device location,"
+    return f"Your selected saved location ({label})"

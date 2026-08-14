@@ -5,6 +5,11 @@ description = "GAIA Protocol Two modular monolith scaffold"
 requires-python = ">=3.12"
 readme = "README.md"
 
+[project.optional-dependencies]
+orchestration = [
+    "langgraph>=0.2,<1",
+]
+
 [tool.gaia.financial_constitution]
 total_initial_cash_budget_usd = 20.00
 target_development_cash_spend_usd = 0.00
@@ -16,4 +21,3 @@ allow_automatic_overage_billing = false
 [tool.unittest]
 start-directory = "tests"
 pattern = "test_*.py"
-
