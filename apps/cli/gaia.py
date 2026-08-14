@@ -27,6 +27,7 @@ from apps.api.gaia_api.runtime import (
     create_runtime,
     doctor_report,
     persistence_summary,
+    provider_health_rows,
     seed_demo,
 )
 from apps.api.gaia_api.season_api import post_season_plan
@@ -279,17 +280,7 @@ def handle_providers_list(args: argparse.Namespace) -> JsonDict:
 def handle_providers_health(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
-        return {
-            "providers": [
-                {
-                    "provider_id": provider.provider_id,
-                    "enabled": provider.enabled,
-                    "health": runtime.tool_gateway.health_monitor.status(provider.provider_id).value,
-                    "billing_class": provider.billing_class.value,
-                }
-                for provider in runtime.registry.all()
-            ]
-        }
+        return {"providers": provider_health_rows(runtime)}
     finally:
         runtime.close()
 

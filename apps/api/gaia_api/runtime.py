@@ -81,12 +81,18 @@ from packages.research import EuropePMCFetchTool, EuropePMCSearchTool, FixtureRe
 from packages.research.europe_pmc import EuropePMCAdapter
 from packages.season import DeterministicSeasonPlanner, SeasonContextProvider, SeasonService
 from packages.sentinel import (
+    APHIS_CITRUS_URL,
+    APHIS_IMPORT_URL,
+    FDACS_CITRUS_QUARANTINE_URL,
+    FDACS_IMPORT_REGULATIONS_URL,
+    FDACS_PLANT_INSPECTION_URL,
     FixtureAPHISProvider,
     FixtureFloridaFDACSProvider,
     FixtureTexasAgricultureProvider,
     JurisdictionPack,
     JurisdictionPackMetadata,
     JurisdictionPackRegistry,
+    ReadOnlyRegulatoryPageAdapter,
     RegulationMovementRulesTool,
     RegulationPestAlertsTool,
     SentinelService,
@@ -178,6 +184,7 @@ class GaiaRuntime:
     sovereign: bool = False
     text_model: str = "llama3.1:latest"
     vision_model: str = "llava:latest"
+    live_regulatory_probes: dict[str, object] = field(default_factory=dict)
 
     def context(self, *, request_id: str = "cli") -> ToolExecutionContext:
         return ToolExecutionContext(
@@ -272,6 +279,7 @@ def create_runtime(
     aphis = FixtureAPHISProvider()
     texas = FixtureTexasAgricultureProvider()
     florida = FixtureFloridaFDACSProvider()
+    live_regulatory_probes = _live_regulatory_probes(modes)
     pack_registry = JurisdictionPackRegistry(
         [
             JurisdictionPack(JurisdictionPackMetadata("us_federal", "0.1.0", "U.S. federal", "US", ["usda_aphis"], enabled=True), aphis),
@@ -351,6 +359,7 @@ def create_runtime(
         sovereign=sovereign,
         text_model=os.environ.get("GAIA_OLLAMA_MODEL", "llama3.1:latest"),
         vision_model=os.environ.get("GAIA_LLAVA_MODEL", "llava:latest"),
+        live_regulatory_probes=live_regulatory_probes,
     )
 
 
@@ -572,6 +581,44 @@ def runtime_status(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port
             "workspace_id": runtime.workspace_id,
         },
     }
+
+
+def provider_mode_for_provider(provider_id: str, modes: dict[str, str]) -> str:
+    mapping = {
+        "nasa-power": "nasa_power",
+        "genesys-pgr": "genesys_pgr",
+        "europe-pmc": "europe_pmc",
+        "texas-agriculture": "texas_agriculture",
+        "florida-fdacs": "florida_fdacs",
+        "usda-nass": "usda_nass",
+        "usda-ams": "usda_ams",
+        "google-calendar": "google_calendar",
+        "ollama-local": "text_model",
+        "ollama-llava-local": "vision_model",
+    }
+    return modes.get(mapping.get(provider_id, provider_id), "fixture")
+
+
+def provider_health_rows(runtime: GaiaRuntime) -> list[dict]:
+    modes = runtime.provider_modes.to_dict()
+    rows = []
+    for provider in runtime.registry.all():
+        mode = provider_mode_for_provider(provider.provider_id, modes)
+        row = {
+            "provider_id": provider.provider_id,
+            "enabled": provider.enabled,
+            "mode": mode,
+            "remote": provider.remote,
+            "health": runtime.tool_gateway.health_monitor.status(provider.provider_id).value,
+            "billing_class": provider.billing_class.value,
+            "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
+            "allow_overage": provider.cost_policy.allow_overage,
+        }
+        if provider.provider_id in runtime.live_regulatory_probes:
+            row["live_probe"] = "read_only_official_pages"
+            row["decision_source"] = "fixture_jurisdiction_pack"
+        rows.append(row)
+    return rows
 
 
 def doctor_report(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port: int = DEFAULT_ALPHA_PORT) -> dict:
@@ -806,7 +853,7 @@ def _nws_provider(modes: AlphaProviderModes):
 
 def _nasa_power_provider(modes: AlphaProviderModes):
     if modes.nasa_power == "live":
-        return NASAPowerApiAdapter()
+        return NASAPowerApiAdapter(base_url=os.environ.get("NASA_POWER_BASE_URL"))
     return FixtureNASAPowerProvider()
 
 
@@ -814,6 +861,25 @@ def _gbif_provider(modes: AlphaProviderModes):
     if modes.gbif == "live":
         return GBIFApiAdapter(user_agent=os.environ.get("GBIF_USER_AGENT") or "GAIA Local Alpha/0.1")
     return FixtureGBIFProvider()
+
+
+def _live_regulatory_probes(modes: AlphaProviderModes) -> dict[str, ReadOnlyRegulatoryPageAdapter]:
+    probes: dict[str, ReadOnlyRegulatoryPageAdapter] = {}
+    if modes.aphis == "live":
+        probes["aphis"] = ReadOnlyRegulatoryPageAdapter(
+            provider_id="aphis",
+            authority="USDA APHIS",
+            urls=(APHIS_CITRUS_URL, APHIS_IMPORT_URL),
+            timeout_seconds=20,
+        )
+    if modes.florida_fdacs == "live":
+        probes["florida-fdacs"] = ReadOnlyRegulatoryPageAdapter(
+            provider_id="florida-fdacs",
+            authority="Florida Department of Agriculture and Consumer Services",
+            urls=(FDACS_PLANT_INSPECTION_URL, FDACS_CITRUS_QUARANTINE_URL, FDACS_IMPORT_REGULATIONS_URL),
+            timeout_seconds=20,
+        )
+    return probes
 
 
 def _text_model_provider(modes: AlphaProviderModes):

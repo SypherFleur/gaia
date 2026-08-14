@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timedelta, timezone
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from packages.environment.providers import EnvironmentalProviderResult
@@ -73,6 +76,31 @@ class NWSApiAdapter:
 
 class NASAPowerApiAdapter:
     provider_id = "nasa-power"
+    base_url = "https://power.larc.nasa.gov/api/temporal/daily/point"
+
+    def __init__(self, base_url: str | None = None, timeout_seconds: int = 15) -> None:
+        if base_url:
+            base = base_url.rstrip("/")
+            self.base_url = base if base.endswith("/point") else f"{base}/api/temporal/daily/point"
+        self.timeout_seconds = timeout_seconds
+
+    async def climate_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
+        power_date = _power_date(at_time)
+        params = {
+            "parameters": "T2M,PRECTOTCORR,ALLSKY_SFC_SW_DWN",
+            "community": "AG",
+            "longitude": f"{longitude:.4f}",
+            "latitude": f"{latitude:.4f}",
+            "start": power_date,
+            "end": power_date,
+            "format": "JSON",
+        }
+        url = self.base_url + "?" + urllib.parse.urlencode(params)
+        try:
+            payload = await asyncio.to_thread(self._get_json, url)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"nasa_power_error:{exc.__class__.__name__}"])
+        return self.normalize_daily_response(payload, url)
 
     def normalize_daily_response(self, payload: dict, canonical_url: str) -> EnvironmentalProviderResult:
         properties = payload.get("properties", {})
@@ -99,6 +127,11 @@ class NASAPowerApiAdapter:
                 )
             ],
         )
+
+    def _get_json(self, url: str) -> dict:
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "GAIA Local Alpha/0.1"})
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
 
 
 class USDASoilDataAccessAdapter:
@@ -152,3 +185,10 @@ def _first_value(values: dict) -> float | None:
         return None
     return next(iter(values.values()))
 
+
+def _power_date(at_time: str | None) -> str:
+    if at_time:
+        normalized = at_time[:10].replace("-", "")
+        if len(normalized) == 8 and normalized.isdigit():
+            return normalized
+    return (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y%m%d")

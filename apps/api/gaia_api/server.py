@@ -24,6 +24,8 @@ from apps.api.gaia_api.runtime import (
     cost_status,
     create_runtime,
     persistence_summary,
+    provider_health_rows,
+    provider_mode_for_provider,
     runtime_status,
     seed_demo,
 )
@@ -362,7 +364,7 @@ def providers_payload(runtime: GaiaRuntime) -> dict:
                 "billing_class": provider.billing_class.value,
                 "enabled": provider.enabled,
                 "remote": provider.remote,
-                "mode": modes.get(provider.provider_id.replace("-", "_"), _mode_for_provider(provider.provider_id, modes)),
+                "mode": provider_mode_for_provider(provider.provider_id, modes),
                 "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
                 "allow_overage": provider.cost_policy.allow_overage,
                 "authentication_requirement": provider.authentication_requirement.value,
@@ -373,17 +375,7 @@ def providers_payload(runtime: GaiaRuntime) -> dict:
 
 
 def provider_health_payload(runtime: GaiaRuntime) -> dict:
-    return {
-        "providers": [
-            {
-                "provider_id": provider.provider_id,
-                "enabled": provider.enabled,
-                "health": runtime.tool_gateway.health_monitor.status(provider.provider_id).value,
-                "billing_class": provider.billing_class.value,
-            }
-            for provider in runtime.registry.all()
-        ]
-    }
+    return {"providers": provider_health_rows(runtime)}
 
 
 def source_records(runtime: GaiaRuntime, ids: list[str]) -> list[dict]:
@@ -399,22 +391,6 @@ def source_records(runtime: GaiaRuntime, ids: list[str]) -> list[dict]:
         (*ids, runtime.organization_id),
     ).fetchall()
     return [dict(row) for row in rows]
-
-
-def _mode_for_provider(provider_id: str, modes: dict[str, str]) -> str:
-    mapping = {
-        "nasa-power": "nasa_power",
-        "genesys-pgr": "genesys_pgr",
-        "europe-pmc": "europe_pmc",
-        "texas-agriculture": "texas_agriculture",
-        "florida-fdacs": "florida_fdacs",
-        "usda-nass": "usda_nass",
-        "usda-ams": "usda_ams",
-        "google-calendar": "google_calendar",
-        "ollama-local": "text_model",
-        "ollama-llava-local": "vision_model",
-    }
-    return modes.get(mapping.get(provider_id, provider_id), "fixture")
 
 
 if __name__ == "__main__":

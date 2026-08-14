@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from apps.api.gaia_api.runtime import AlphaProviderModes, cost_status, create_runtime, doctor_report
+from apps.api.gaia_api.runtime import AlphaProviderModes, cost_status, create_runtime, doctor_report, provider_health_rows
 
 
 class ProtocolThreeRuntimeTest(unittest.TestCase):
@@ -48,6 +48,23 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
             self.assertFalse(report["automatic_paid_usage_enabled"])
             self.assertNotIn("SECRET", str(report).upper())
             self.assertNotIn("API_KEY", str(report).upper())
+        finally:
+            runtime.close()
+
+    def test_explicit_free_live_regulatory_modes_are_read_only_probes(self) -> None:
+        runtime = create_runtime(
+            "sqlite:///:memory:",
+            provider_modes=AlphaProviderModes(aphis="live", florida_fdacs="live", text_model="fixture", vision_model="fixture"),
+        )
+        try:
+            rows = {row["provider_id"]: row for row in provider_health_rows(runtime)}
+
+            self.assertEqual(rows["aphis"]["mode"], "live")
+            self.assertEqual(rows["aphis"]["live_probe"], "read_only_official_pages")
+            self.assertEqual(rows["aphis"]["decision_source"], "fixture_jurisdiction_pack")
+            self.assertEqual(rows["florida-fdacs"]["mode"], "live")
+            self.assertEqual(rows["florida-fdacs"]["live_probe"], "read_only_official_pages")
+            self.assertFalse(cost_status(runtime)["paid_providers_enabled"])
         finally:
             runtime.close()
 
