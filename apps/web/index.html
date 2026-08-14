@@ -3,191 +3,250 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GAIA Chat Dev</title>
+    <title>GAIA Local Alpha</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <aside class="plants">
-        <header>
-          <h2>Plants</h2>
-          <button class="small" id="new-plant" type="button">New</button>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <header class="brand">
+          <h1>GAIA</h1>
+          <span id="identity-label">Development Identity</span>
         </header>
-        <div class="plant-list" id="plant-list"></div>
-        <form class="plant-form" id="plant-form">
-          <input name="taxon" aria-label="Taxonomy search" value="Solanum lycopersicum" />
-          <input name="nickname" aria-label="Nickname" value="Patio tomato" />
-          <input name="cultivar" aria-label="Cultivar" value="Cherokee Purple" />
-          <button type="submit">Create</button>
-        </form>
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-item active" data-view="chat" type="button">Chat</button>
+          <button class="nav-item" data-view="plants" type="button">Plants</button>
+          <button class="nav-item" data-view="vision" type="button">Vision</button>
+          <button class="nav-item" data-view="season" type="button">Season</button>
+          <button class="nav-item" data-view="research" type="button">Research</button>
+          <button class="nav-item" data-view="movement" type="button">Movement</button>
+          <button class="nav-item" data-view="markets" type="button">Markets</button>
+          <button class="nav-item" data-view="system" type="button">Settings</button>
+        </nav>
+        <section class="sidebar-status" aria-live="polite">
+          <div>
+            <span>Spend</span>
+            <strong id="sidebar-spend">$0.00</strong>
+          </div>
+          <div>
+            <span>Database</span>
+            <strong id="sidebar-db">SQLite</strong>
+          </div>
+          <div>
+            <span>Model</span>
+            <strong id="sidebar-model">checking</strong>
+          </div>
+        </section>
       </aside>
 
-      <section class="chat">
+      <main class="workspace">
         <header class="topbar">
           <div>
-            <h1>GAIA</h1>
-            <p>Core chat and context diagnostics</p>
+            <h2 id="view-title">Chat</h2>
+            <p id="view-subtitle">Local alpha workspace</p>
           </div>
-          <div class="location">
-            <span>Selected plant</span>
-            <strong id="selected-plant-name">Patio tomato</strong>
+          <div class="topbar-controls">
+            <select id="plant-select" aria-label="Selected plant"></select>
+            <button id="seed-demo" type="button">Seed Demo</button>
+            <button id="refresh" type="button">Refresh</button>
           </div>
         </header>
 
-        <section class="plant-detail">
-          <div>
-            <h2 id="detail-name">Patio tomato</h2>
-            <p id="detail-species">Solanum lycopersicum - Cherokee Purple</p>
+        <section class="view active" id="view-chat" aria-labelledby="view-title">
+          <div class="chat-layout">
+            <section class="messages-panel">
+              <div class="messages" id="messages" aria-live="polite"></div>
+              <form class="composer" id="chat-form">
+                <textarea id="chat-input" rows="3" aria-label="Message">What county am I in?</textarea>
+                <div class="composer-actions">
+                  <input id="chat-image" type="file" accept="image/*" aria-label="Attach image" />
+                  <button type="submit">Send</button>
+                </div>
+              </form>
+            </section>
+            <aside class="context-panel">
+              <section>
+                <h3>Result</h3>
+                <dl class="metric-list">
+                  <div><dt>Route</dt><dd id="chat-route">idle</dd></div>
+                  <div><dt>Model runs</dt><dd id="chat-model-runs">0</dd></div>
+                  <div><dt>Sources</dt><dd id="chat-source-count">0</dd></div>
+                </dl>
+              </section>
+              <section>
+                <h3>Sources</h3>
+                <div class="chips" id="chat-sources"></div>
+              </section>
+              <section>
+                <h3>Guidance</h3>
+                <div class="guidance-card" id="guidance-card">No saved plan selected.</div>
+              </section>
+            </aside>
           </div>
-          <dl>
-            <div>
-              <dt>Stage</dt>
-              <dd id="detail-stage">vegetative</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd>Austin garden</dd>
-            </div>
-            <div>
-              <dt>Profile</dt>
-              <dd id="detail-profile">taxonomy source-backed</dd>
-            </div>
-          </dl>
         </section>
 
-        <section class="messages" aria-live="polite">
-          <article class="message assistant">
-            Ask a geography, environmental, planting, or image-evidence question. Deterministic routes should show zero model runs.
-          </article>
+        <section class="view" id="view-plants">
+          <div class="two-column">
+            <section>
+              <header class="section-header">
+                <h3>Plant List</h3>
+                <span id="plant-count">0</span>
+              </header>
+              <div class="plant-list" id="plant-list"></div>
+              <form class="stack-form" id="plant-form">
+                <input name="taxon" aria-label="Species" value="Solanum lycopersicum" />
+                <input name="nickname" aria-label="Nickname" value="Cherokee Purple Tomato" />
+                <input name="cultivar" aria-label="Cultivar" value="Cherokee Purple" />
+                <button type="submit">Create Plant</button>
+              </form>
+            </section>
+            <section>
+              <header class="section-header">
+                <h3>Plant Detail</h3>
+                <button id="ask-about-plant" type="button">Ask GAIA</button>
+              </header>
+              <div class="detail-panel" id="plant-detail"></div>
+              <form class="stack-form" id="observation-form">
+                <textarea name="text" rows="3" aria-label="Observation">Lower leaves show mild yellowing.</textarea>
+                <button type="submit">Add Observation</button>
+              </form>
+              <div class="timeline" id="observation-list"></div>
+            </section>
+          </div>
         </section>
 
-        <form class="composer">
-          <input
-            aria-label="Message"
-            name="message"
-            value="Given those conditions, what should I consider before planting tomatoes?"
-          />
-          <button type="submit">Send</button>
-        </form>
-      </section>
+        <section class="view" id="view-vision">
+          <div class="two-column">
+            <section>
+              <h3>Plant Image</h3>
+              <input id="vision-file" type="file" accept="image/*" aria-label="Plant image" />
+              <div class="image-preview" id="image-preview"></div>
+              <button id="vision-run" type="button">Analyze Photo</button>
+            </section>
+            <section>
+              <h3>Visual Evidence</h3>
+              <div class="status-card" id="vision-status">idle</div>
+              <div class="split-list">
+                <div>
+                  <h4>Observations</h4>
+                  <ul id="vision-observations"></ul>
+                </div>
+                <div>
+                  <h4>Hypotheses</h4>
+                  <ul id="vision-hypotheses"></ul>
+                </div>
+              </div>
+              <pre id="vision-output"></pre>
+            </section>
+          </div>
+        </section>
 
-      <aside class="diagnostics">
-        <h2>Diagnostics</h2>
-        <dl>
-          <div>
-            <dt>Route</dt>
-            <dd id="route">idle</dd>
+        <section class="view" id="view-season">
+          <div class="two-column">
+            <form class="stack-form" id="season-form">
+              <input name="crops" aria-label="Crops" value="tomato" />
+              <input name="goal" aria-label="Goal" value="Create a fall care plan for Cherokee Purple Tomato." />
+              <div class="date-grid">
+                <input name="start" aria-label="Start date" type="date" value="2026-09-15" />
+                <input name="end" aria-label="End date" type="date" value="2026-12-15" />
+              </div>
+              <button type="submit">Create Plan</button>
+            </form>
+            <section>
+              <header class="section-header">
+                <h3>Season Plan</h3>
+                <button id="calendar-preview" type="button">Preview Events</button>
+              </header>
+              <div class="status-card" id="calendar-state">Google Calendar - Not connected</div>
+              <div class="timeline" id="season-timeline"></div>
+              <pre id="season-output"></pre>
+            </section>
           </div>
-          <div>
-            <dt>Model runs</dt>
-            <dd id="model-runs">0</dd>
+        </section>
+
+        <section class="view" id="view-research">
+          <div class="two-column">
+            <form class="stack-form" id="research-form">
+              <input name="query" aria-label="Research question" value="Do lunar phases improve germination?" />
+              <button type="submit">Search Research</button>
+              <button id="research-synthesize" type="button">Synthesize</button>
+            </form>
+            <section>
+              <h3>Evidence</h3>
+              <div class="chips" id="research-quality"></div>
+              <div class="source-list" id="research-results"></div>
+              <pre id="research-output"></pre>
+            </section>
           </div>
-          <div>
-            <dt>Cost</dt>
-            <dd>$0.00</dd>
+        </section>
+
+        <section class="view" id="view-movement">
+          <div class="two-column">
+            <form class="stack-form" id="movement-form">
+              <input name="species" aria-label="Plant or article" value="Citrus sinensis" />
+              <select name="origin" aria-label="Origin">
+                <option value="tx-houston">Houston, TX</option>
+                <option value="fl-orlando">Orlando, FL</option>
+                <option value="fl-broward">Broward County, FL</option>
+              </select>
+              <select name="destination" aria-label="Destination">
+                <option value="fl-orlando">Orlando, FL</option>
+                <option value="tx-hidalgo">Hidalgo County, TX</option>
+                <option value="ga-atlanta">Atlanta, GA</option>
+              </select>
+              <select name="plantPart" aria-label="Plant part">
+                <option value="live plant">Live plant</option>
+                <option value="fruit">Fruit</option>
+                <option value="seed">Seed</option>
+                <option value="growing medium">Growing medium</option>
+              </select>
+              <label class="inline-check"><input name="livePlant" type="checkbox" checked /> Live plant</label>
+              <label class="inline-check"><input name="soilAttached" type="checkbox" /> Soil attached</label>
+              <input name="purpose" aria-label="Purpose" value="personal movement" />
+              <button type="submit">Check Movement</button>
+            </form>
+            <section>
+              <h3>Biosecurity Result</h3>
+              <div class="status-card" id="movement-status">UNRESOLVED</div>
+              <div class="source-list" id="movement-rules"></div>
+              <pre id="movement-output"></pre>
+            </section>
           </div>
-          <div>
-            <dt>Sources</dt>
-            <dd id="sources">0</dd>
+        </section>
+
+        <section class="view" id="view-markets">
+          <div class="two-column">
+            <form class="stack-form" id="markets-form">
+              <input name="commodity" aria-label="Commodity" value="tomato" />
+              <button type="submit">View Context</button>
+            </form>
+            <section>
+              <h3>Regional Context</h3>
+              <div class="metric-grid" id="market-metrics"></div>
+              <pre id="markets-output"></pre>
+            </section>
           </div>
-        </dl>
-        <details>
-          <summary>Provider status</summary>
-          <pre id="providers">{}</pre>
-        </details>
-        <details open>
-          <summary>Observations</summary>
-          <ul id="observations"></ul>
-        </details>
-        <details open>
-          <summary>Vision</summary>
-          <dl>
-            <div>
-              <dt>Status</dt>
-              <dd id="vision-status">idle</dd>
-            </div>
-            <div>
-              <dt>Provider</dt>
-              <dd id="vision-provider">fixture-vision-local</dd>
-            </div>
-          </dl>
-          <button class="small" id="vision-demo" type="button">Analyze</button>
-          <pre id="vision-output">{}</pre>
-        </details>
-        <details>
-          <summary>Germplasm</summary>
-          <form id="germplasm-form" class="mini-form">
-            <input name="query" aria-label="Germplasm query" value="heat tolerant cowpea" />
-            <button class="small" type="submit">Find</button>
-          </form>
-          <pre id="germplasm"></pre>
-        </details>
-        <details open>
-          <summary>Scholar</summary>
-          <button class="small" id="evidence-demo" type="button">View evidence</button>
-          <div class="source-chips">
-            <span>Peer-reviewed</span>
-            <span>Experimental</span>
+        </section>
+
+        <section class="view" id="view-system">
+          <div class="system-grid">
+            <section>
+              <h3>System</h3>
+              <dl class="metric-list" id="system-list"></dl>
+            </section>
+            <section>
+              <h3>Providers</h3>
+              <div class="source-list" id="provider-list"></div>
+            </section>
+            <section>
+              <h3>Persistence</h3>
+              <dl class="metric-list" id="persistence-list"></dl>
+            </section>
           </div>
-          <pre id="evidence-output">{}</pre>
-        </details>
-        <details open>
-          <summary>Sentinel</summary>
-          <form id="movement-form" class="mini-form">
-            <input name="species" aria-label="Movement species" value="Citrus sinensis" />
-            <select name="plantPart" aria-label="Plant part">
-              <option value="live plant" selected>Live plant</option>
-              <option value="fruit">Fruit</option>
-              <option value="seed">Seed</option>
-              <option value="cutting">Cutting</option>
-            </select>
-            <label class="check"><input name="soilAttached" type="checkbox" /> Soil attached</label>
-            <button class="small" type="submit">Check</button>
-          </form>
-          <div class="sentinel-card" id="sentinel-card">
-            <strong id="sentinel-status">UNRESOLVED</strong>
-            <span id="sentinel-freshness">freshness: idle</span>
-          </div>
-          <pre id="sentinel-output">{}</pre>
-        </details>
-        <details open>
-          <summary>Season</summary>
-          <button class="small" id="season-demo" type="button">Plan</button>
-          <div class="sentinel-card">
-            <strong id="season-confidence">PROVISIONAL</strong>
-            <span id="season-window">no plan</span>
-          </div>
-          <ol class="timeline" id="season-timeline"></ol>
-          <button class="small" id="calendar-preview" type="button">Preview calendar</button>
-          <pre id="season-output">{}</pre>
-        </details>
-        <details open>
-          <summary>Mercator</summary>
-          <button class="small" id="mercator-demo" type="button">Market context</button>
-          <div class="sentinel-card">
-            <strong id="mercator-freshness">unavailable</strong>
-            <span id="mercator-date">no date</span>
-          </div>
-          <pre id="mercator-output">{}</pre>
-        </details>
-        <details open>
-          <summary>Institution</summary>
-          <button class="small" id="research-run-demo" type="button">Research run</button>
-          <div class="sentinel-card">
-            <strong id="research-status">idle</strong>
-            <span id="research-policy">policy: local</span>
-          </div>
-          <div class="source-chips">
-            <span>Researcher</span>
-            <span>Reviewer</span>
-            <span>Sovereign-ready</span>
-          </div>
-          <button class="small" id="review-demo" type="button">Approve</button>
-          <button class="small" id="export-demo" type="button">Export</button>
-          <pre id="institution-output">{}</pre>
-        </details>
-      </aside>
-    </main>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="./app.js"></script>
   </body>
 </html>

@@ -73,6 +73,27 @@ class ProtocolThreeServerTest(unittest.TestCase):
             finally:
                 stop_server(process)
 
+    def test_static_alpha_workspace_is_served(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            port = free_port()
+            database = f"sqlite:///{Path(tmp) / 'gaia-static.sqlite3'}"
+            process = start_server(port, database)
+            try:
+                wait_json(f"http://127.0.0.1:{port}/api/v1/status")
+                html = get_text(f"http://127.0.0.1:{port}/")
+                javascript = get_text(f"http://127.0.0.1:{port}/app.js")
+                stylesheet = get_text(f"http://127.0.0.1:{port}/styles.css")
+
+                self.assertIn("GAIA Local Alpha", html)
+                self.assertIn('data-view="chat"', html)
+                self.assertIn("/api/v1/chat/stream", javascript)
+                self.assertIn("/api/v1/seed/demo", javascript)
+                self.assertIn(".app-shell", stylesheet)
+                self.assertNotIn("Core chat and context diagnostics", html)
+                self.assertNotIn("static demo", javascript.lower())
+            finally:
+                stop_server(process)
+
     def test_gaia_dev_smoke_starts_and_shuts_down_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             port = free_port()
@@ -135,6 +156,11 @@ def wait_json(url: str, timeout: float = 12.0) -> dict:
             last_error = exc
             time.sleep(0.2)
     raise AssertionError(f"{url} did not become reachable: {last_error}")
+
+
+def get_text(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=5) as response:
+        return response.read().decode("utf-8")
 
 
 def post_json(url: str, payload: dict) -> dict:

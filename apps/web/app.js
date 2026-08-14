@@ -1,494 +1,575 @@
-const form = document.querySelector(".composer");
-const input = form.querySelector("input");
-const messages = document.querySelector(".messages");
-const route = document.querySelector("#route");
-const modelRuns = document.querySelector("#model-runs");
-const sources = document.querySelector("#sources");
-const providers = document.querySelector("#providers");
-const plantList = document.querySelector("#plant-list");
-const plantForm = document.querySelector("#plant-form");
-const selectedPlantName = document.querySelector("#selected-plant-name");
-const detailName = document.querySelector("#detail-name");
-const detailSpecies = document.querySelector("#detail-species");
-const detailStage = document.querySelector("#detail-stage");
-const detailProfile = document.querySelector("#detail-profile");
-const observations = document.querySelector("#observations");
-const germplasmForm = document.querySelector("#germplasm-form");
-const germplasm = document.querySelector("#germplasm");
-const visionDemo = document.querySelector("#vision-demo");
-const visionStatus = document.querySelector("#vision-status");
-const visionProvider = document.querySelector("#vision-provider");
-const visionOutput = document.querySelector("#vision-output");
-const evidenceDemo = document.querySelector("#evidence-demo");
-const evidenceOutput = document.querySelector("#evidence-output");
-const movementForm = document.querySelector("#movement-form");
-const sentinelStatus = document.querySelector("#sentinel-status");
-const sentinelFreshness = document.querySelector("#sentinel-freshness");
-const sentinelOutput = document.querySelector("#sentinel-output");
-const seasonDemo = document.querySelector("#season-demo");
-const calendarPreview = document.querySelector("#calendar-preview");
-const seasonConfidence = document.querySelector("#season-confidence");
-const seasonWindow = document.querySelector("#season-window");
-const seasonTimeline = document.querySelector("#season-timeline");
-const seasonOutput = document.querySelector("#season-output");
-const mercatorDemo = document.querySelector("#mercator-demo");
-const mercatorFreshness = document.querySelector("#mercator-freshness");
-const mercatorDate = document.querySelector("#mercator-date");
-const mercatorOutput = document.querySelector("#mercator-output");
-const researchRunDemo = document.querySelector("#research-run-demo");
-const reviewDemo = document.querySelector("#review-demo");
-const exportDemo = document.querySelector("#export-demo");
-const researchStatus = document.querySelector("#research-status");
-const researchPolicy = document.querySelector("#research-policy");
-const institutionOutput = document.querySelector("#institution-output");
+const state = {
+  status: null,
+  identity: null,
+  system: null,
+  plants: [],
+  selectedPlantId: null,
+  lastMediaId: null,
+  lastSeasonPlanId: null,
+  lastConversationId: null,
+};
 
-const plants = [
-  {
-    id: "plant-demo-tomato",
-    nickname: "Patio tomato",
-    species: "Solanum lycopersicum",
-    cultivar: "Cherokee Purple",
-    lifecycle_stage: "vegetative",
-    location: "Austin garden",
-    profile: "taxonomy source-backed; cultivation traits mostly unknown",
-    source_count: 3,
-    observations: ["Three lower leaves have yellow margins."],
-    vision: {
-      status: "AVAILABLE",
-      provider: "fixture-vision-local",
-      observations: ["visible yellowing", "brown circular lesions"],
-      hypotheses: [
-        {
-          label: "early blight",
-          status: "hypothesis",
-          confidence: 0.46,
-          required_next_evidence: ["underside of affected leaf", "close-up of lesion margins"],
-        },
-      ],
-      safety_note: "Vision output is visual evidence, not a confirmed diagnosis.",
-    },
-    evidence: {
-      question: "What does research say about calcium sprays for blossom-end rot?",
-      evidence_quality: "mixed",
-      source_cards: [
-        {
-          title: "Blossom-end rot of tomato: calcium transport, water stress, and management",
-          authors: "Doe J",
-          journal: "Horticultural Reviews",
-          year: 2019,
-          doi: "10.1000/ber-review",
-          study_type: "review",
-          relevance: "species partial; intervention partial",
-          why_used: "Review evidence reports inconsistent foliar calcium spray benefit.",
-          retrieved_through: "Europe PMC",
-          category: "Peer-reviewed",
-        },
-        {
-          title: "Greenhouse calcium sprays in tomato under controlled humidity",
-          authors: "Green G",
-          journal: "Protected Horticulture",
-          year: 2018,
-          doi: null,
-          study_type: "controlled experiment",
-          relevance: "greenhouse growing-system mismatch",
-          why_used: "Shows context limits for applying controlled greenhouse results outdoors.",
-          retrieved_through: "Europe PMC",
-          category: "Experimental",
-        },
-      ],
-    },
-    sentinel: {
-      status: "CONDITIONAL",
-      freshness: "CURRENT",
-      authorities: ["USDA APHIS", "Texas Department of Agriculture"],
-      requirements: ["APHIS certificate or compliance agreement", "TDA compliance agreement or special permit may be required"],
-      unresolved: [],
-      source_count: 3,
-      note: "GAIA is not the legal authority.",
-    },
-    season: {
-      name: "Fall garden plan",
-      confidence: "MODERATE",
-      window: "2026-09-15 to 2026-12-15",
-      actions: [
-        { title: "Prepare bed for tomato", date: "2026-09-15", type: "prepare_bed", basis: "climatological seasonal context" },
-        { title: "Transplant tomato", date: "2026-09-29", type: "transplant", basis: "climatological seasonal context", weather_sensitive: true },
-        { title: "Check tomato moisture", date: "2026-10-01", type: "water_check", basis: "check before irrigating" },
-      ],
-      calendar: { preview_required: true, external_writes: 0, stale_preview_protection: true },
-      luna: { phase: "waxing crescent", influence_on_plan: "None", evidence_status: "Experimental" },
-    },
-    mercator: {
-      commodity: { canonical_name: "tomato", source_labels: ["Tomatoes, fresh market", "TOMATOES"] },
-      production_statistics: [
-        {
-          statistic: "production",
-          value: 12500,
-          unit: "cwt",
-          geography: { state_code: "TX", county_or_district: "Travis County" },
-          observation_period: "2025",
-          freshness: "recent_periodic",
-          limitation: "Annual NASS statistic; not current crop availability.",
-        },
-      ],
-      price_observations: [
-        {
-          market: "Dallas terminal market fixture",
-          report_date: "2026-08-10",
-          value: 18,
-          unit: "$/25 lb box",
-          package: "25 lb box",
-          grade: "medium",
-          freshness: "current",
-          limitation: "Dated market report; not a price forecast.",
-        },
-      ],
-      supply_chain_context: [
-        {
-          origin_region: "Texas fixture production region",
-          destination_region: "Dallas terminal market fixture",
-          transport_mode: "truck",
-          period: "2022",
-          data_class: "STRUCTURAL_SUPPLY_CHAIN",
-          limitation: "Historical structural context; not live logistics.",
-        },
-      ],
-      source_count: 2,
-    },
-    institution: {
-      organization: "FAMU Research Lab fixture",
-      policy: {
-        deployment_mode: "institution",
-        telemetry_policy: "LOCAL_ONLY",
-        remote_models_allowed: false,
-        private_document_egress: false,
-      },
-      projects: [
-        {
-          title: "Tomato irrigation trial",
-          status: "ACTIVE",
-          research_question: "Does deficit irrigation improve tomato water use efficiency?",
-        },
-      ],
-      run: {
-        status: "COMPLETED",
-        model_versions: [{ provider: "ollama-local", model: "llama3.1:latest", model_version: "3.1" }],
-        prompt_versions: [{ prompt_id: "gaia.test", prompt_version: "0.1.0", prompt_hash: "hash-v1" }],
-        source_records: [{ provider: "fixture", source_type: "research", content_hash: "source-hash" }],
-        output_hashes: { output_bundle_id: "sha256-fixture" },
-      },
-      review: { status: "UNREVIEWED", reviewer: null },
-      export: { manifest: "gaia-research-export", checksums: true, contains_secrets: false },
-    },
-  },
-];
+const views = {
+  chat: { title: "Chat", subtitle: "Ask GAIA with local context and visible provenance." },
+  plants: { title: "Plants", subtitle: "Workspace records, observations, and plant-aware actions." },
+  vision: { title: "Vision", subtitle: "Local image evidence with observations kept separate from hypotheses." },
+  season: { title: "Season", subtitle: "Internal planning with optional calendar preview." },
+  research: { title: "Research", subtitle: "Evidence search, contradictions, applicability, and citations." },
+  movement: { title: "Movement", subtitle: "U.S. movement decision support with currentness and authority notes." },
+  markets: { title: "Markets", subtitle: "Dated production and market context." },
+  system: { title: "Settings", subtitle: "Runtime, provider, cost, and persistence status." },
+};
 
-let selectedPlant = plants[0];
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
-const demoResponses = [
-  {
-    match: "county",
-    route: "geography",
-    model_run_count: 0,
-    content: "Your selected location resolves to Travis County, Texas, United States.",
-    sources: 4,
-    providers: { atlas: { geography: "AVAILABLE", watershed: "AVAILABLE", hardiness: "AVAILABLE" } },
-  },
-  {
-    match: "environment",
-    route: "environment",
-    model_run_count: 0,
-    content: "For Travis County, GAIA has environmental context. Temperature context: 18.3 C (FORECAST). Soil context: Austin urban land complex.",
-    sources: 8,
-    providers: { terra: { nws: "AVAILABLE", nasa_power: "AVAILABLE", soil: "AVAILABLE", water: "AVAILABLE" } },
-  },
-  {
-    match: "image",
-    route: "vision",
-    model_run_count: 0,
-    content: "The image route stores visible observations separately from cautious hypotheses. It does not persist a confirmed diagnosis.",
-    sources: 1,
-    providers: { vision: { "fixture-vision-local": "AVAILABLE" } },
-  },
-  {
-    match: "market",
-    route: "economics",
-    model_run_count: 0,
-    content: "Mercator found dated economic context for tomato. Latest production period: 2025. Recent market report date: 2026-08-10. This is descriptive context, not a forecast, guarantee, or trading signal.",
-    sources: 2,
-    providers: { mercator: { "usda-nass": "AVAILABLE", "usda-ams": "AVAILABLE" } },
-  },
-  {
-    match: "tomato",
-    route: "reasoning",
-    model_run_count: 1,
-    content: "Tomato planting considerations: Wait for a warm, stable window before planting tomatoes.\nAction: Check nighttime lows before transplanting\nConfidence: medium",
-    sources: 8,
-    providers: { model: { provider_id: "ollama-local", model: "llama3.1:latest" } },
-  },
-];
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  appendMessage("user", text);
-  const response = selectDemoResponse(text);
-  route.textContent = "routing";
-  const assistant = appendMessage("assistant", "");
-  await streamText(assistant, response.content);
-  route.textContent = response.route;
-  modelRuns.textContent = String(response.model_run_count);
-  sources.textContent = String(response.sources);
-  providers.textContent = JSON.stringify(response.providers, null, 2);
+document.addEventListener("DOMContentLoaded", () => {
+  bindNavigation();
+  bindForms();
+  refreshAll();
 });
 
-plantForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const data = new FormData(plantForm);
-  const plant = {
-    id: `plant-${Date.now()}`,
-    nickname: data.get("nickname"),
-    species: data.get("taxon"),
-    cultivar: data.get("cultivar"),
-    lifecycle_stage: "unknown",
-    location: "Austin garden",
-    profile: "pending taxonomy confirmation",
-    source_count: 0,
-    observations: [],
-    vision: null,
-  };
-  plants.unshift(plant);
-  selectPlant(plant);
-  renderPlants();
-});
-
-germplasmForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const query = new FormData(germplasmForm).get("query");
-  germplasm.textContent = JSON.stringify(
-    {
-      query,
-      accessions: [
-        {
-          accession_number: "TVu-12345",
-          taxon: "Vigna unguiculata",
-          institute: "IITA Genetic Resources Center fixture",
-          origin: "Nigeria",
-          traits: query.toLowerCase().includes("heat") ? ["heat tolerance"] : [],
-          caveat: "Availability, legal movement, cost, import eligibility, and suitability are not verified.",
-        },
-      ],
-    },
-    null,
-    2,
-  );
-});
-
-visionDemo.addEventListener("click", () => {
-  const fallback = {
-    status: "UNAVAILABLE",
-    provider: "fixture-vision-local",
-    observations: [],
-    hypotheses: [],
-    safety_note: "No image evidence has been attached for this plant.",
-  };
-  const analysis = selectedPlant.vision || fallback;
-  visionStatus.textContent = analysis.status;
-  visionProvider.textContent = analysis.provider;
-  visionOutput.textContent = JSON.stringify(analysis, null, 2);
-  providers.textContent = JSON.stringify({ vision: { [analysis.provider]: analysis.status } }, null, 2);
-  modelRuns.textContent = "0";
-});
-
-evidenceDemo.addEventListener("click", () => {
-  const evidence = selectedPlant.evidence || {
-    question: "No research evidence loaded.",
-    evidence_quality: "insufficient",
-    source_cards: [],
-  };
-  evidenceOutput.textContent = JSON.stringify(evidence, null, 2);
-  providers.textContent = JSON.stringify({ scholar: { "europe-pmc": "AVAILABLE" } }, null, 2);
-});
-
-movementForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const data = new FormData(movementForm);
-  const plantPart = data.get("plantPart");
-  const species = String(data.get("species") || "");
-  const soilAttached = data.get("soilAttached") === "on";
-  const result = movementDemo(species, plantPart, soilAttached);
-  sentinelStatus.textContent = result.status;
-  sentinelFreshness.textContent = `freshness: ${result.freshness}`;
-  sentinelOutput.textContent = JSON.stringify(result, null, 2);
-  route.textContent = "sentinel";
-  modelRuns.textContent = "0";
-  sources.textContent = String(result.source_count);
-  providers.textContent = JSON.stringify({ sentinel: { aphis: "AVAILABLE", "texas-agriculture": "AVAILABLE" } }, null, 2);
-});
-
-seasonDemo.addEventListener("click", () => {
-  renderSeason(selectedPlant.season);
-  route.textContent = "season";
-  modelRuns.textContent = "0";
-  sources.textContent = "3";
-});
-
-calendarPreview.addEventListener("click", () => {
-  const plan = selectedPlant.season;
-  const preview = {
-    status: "PREVIEW",
-    external_writes: 0,
-    events: plan.actions.map((action) => ({
-      summary: `GAIA - ${action.title}`,
-      date: action.date,
-      confirmation_required: true,
-    })),
-  };
-  seasonOutput.textContent = JSON.stringify(preview, null, 2);
-  providers.textContent = JSON.stringify({ calendar: { "fixture-calendar": "preview_only" } }, null, 2);
-});
-
-mercatorDemo.addEventListener("click", () => {
-  renderMercator(selectedPlant.mercator);
-  route.textContent = "economics";
-  modelRuns.textContent = "0";
-  sources.textContent = String(selectedPlant.mercator?.source_count || 0);
-  providers.textContent = JSON.stringify({ mercator: { "usda-nass": "AVAILABLE", "usda-ams": "AVAILABLE" } }, null, 2);
-});
-
-researchRunDemo.addEventListener("click", () => {
-  renderInstitution(selectedPlant.institution);
-  route.textContent = "research";
-  modelRuns.textContent = "1";
-  sources.textContent = String(selectedPlant.institution?.run?.source_records?.length || 0);
-});
-
-reviewDemo.addEventListener("click", () => {
-  const state = selectedPlant.institution || {};
-  state.review = { status: "APPROVED", reviewer: "fixture reviewer", body: "Reviewed separately from original output." };
-  selectedPlant.institution = state;
-  renderInstitution(state);
-});
-
-exportDemo.addEventListener("click", () => {
-  const state = selectedPlant.institution || {};
-  institutionOutput.textContent = JSON.stringify({ export: state.export, run: state.run }, null, 2);
-});
-
-function selectDemoResponse(text) {
-  const lower = text.toLowerCase();
-  return demoResponses.find((item) => lower.includes(item.match)) || demoResponses[3];
+function bindNavigation() {
+  $$(".nav-item").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
+  });
+  $("#refresh").addEventListener("click", refreshAll);
+  $("#seed-demo").addEventListener("click", seedDemo);
+  $("#ask-about-plant").addEventListener("click", () => {
+    showView("chat");
+    $("#chat-input").value = "What should I do for this plant today?";
+    $("#chat-input").focus();
+  });
 }
 
-function movementDemo(species, plantPart, soilAttached) {
-  const base = selectedPlant.sentinel || {
-    status: "UNRESOLVED",
-    freshness: "UNAVAILABLE",
-    authorities: [],
-    requirements: [],
-    unresolved: ["No Sentinel context loaded for selected plant."],
-    source_count: 0,
-  };
-  if (!species.trim()) {
-    return { ...base, status: "UNRESOLVED", unresolved: ["species_required_for_regulatory_matching"] };
+function bindForms() {
+  $("#plant-select").addEventListener("change", (event) => {
+    state.selectedPlantId = event.target.value || null;
+    renderSelectedPlant();
+  });
+  $("#chat-form").addEventListener("submit", submitChat);
+  $("#plant-form").addEventListener("submit", submitPlant);
+  $("#observation-form").addEventListener("submit", submitObservation);
+  $("#vision-file").addEventListener("change", previewVisionFile);
+  $("#vision-run").addEventListener("click", runVision);
+  $("#season-form").addEventListener("submit", submitSeason);
+  $("#calendar-preview").addEventListener("click", previewCalendar);
+  $("#research-form").addEventListener("submit", submitResearchSearch);
+  $("#research-synthesize").addEventListener("click", synthesizeResearch);
+  $("#movement-form").addEventListener("submit", submitMovement);
+  $("#markets-form").addEventListener("submit", submitMarkets);
+}
+
+function showView(viewName) {
+  $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
+  $$(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
+  $("#view-title").textContent = views[viewName].title;
+  $("#view-subtitle").textContent = views[viewName].subtitle;
+}
+
+async function refreshAll() {
+  try {
+    const [status, identity, system, plants] = await Promise.all([
+      api("/api/v1/status"),
+      api("/api/v1/dev-identity"),
+      api("/api/v1/system"),
+      api("/api/v1/plants"),
+    ]);
+    state.status = status;
+    state.identity = identity;
+    state.system = system;
+    state.plants = Array.isArray(plants) ? plants : [];
+    if (!state.selectedPlantId && state.plants.length) state.selectedPlantId = state.plants[0].id;
+    renderStatus();
+    renderPlants();
+    renderSelectedPlant();
+    renderSystem();
+  } catch (error) {
+    toast(`Refresh failed: ${error.message}`);
   }
-  if (plantPart === "fruit") {
-    return {
-      ...base,
-      status: "ALLOWED",
-      requirements: [],
-      note: "Fixture result only; fruit commodity rules require separate current checks in real workflows.",
-    };
+}
+
+async function seedDemo() {
+  try {
+    const result = await api("/api/v1/seed/demo", { method: "POST", body: {} });
+    toast(`Seeded ${result.plant_count} plant and ${result.guidance_plan_count} GuidancePlan.`);
+    await refreshAll();
+  } catch (error) {
+    toast(`Seed failed: ${error.message}`);
   }
-  return {
-    ...base,
-    request: { species, plant_part: plantPart, soil_attached: soilAttached },
-  };
+}
+
+async function submitChat(event) {
+  event.preventDefault();
+  const text = $("#chat-input").value.trim();
+  if (!text) return;
+  appendMessage("user", text);
+  const imageFile = $("#chat-image").files[0];
+  if (imageFile) await uploadAndAnalyzeImage(imageFile, "chat");
+  const assistant = appendMessage("assistant", "");
+  $("#chat-route").textContent = "routing";
+  $("#chat-model-runs").textContent = "0";
+  $("#chat-source-count").textContent = "0";
+  $("#guidance-card").textContent = "Waiting for GAIA...";
+  try {
+    await streamChat(text, assistant);
+    $("#chat-input").value = "";
+    $("#chat-image").value = "";
+  } catch (error) {
+    assistant.textContent = readableError(error);
+    $("#chat-route").textContent = "error";
+  }
+}
+
+async function streamChat(message, node) {
+  const response = await fetch("/api/v1/chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      location_id: state.identity?.primary_location_id,
+      user_plant_id: state.selectedPlantId,
+      conversation_id: state.lastConversationId,
+    }),
+  });
+  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+    for (const part of parts) handleStreamEvent(part, node);
+  }
+  if (buffer.trim()) handleStreamEvent(buffer, node);
+}
+
+function handleStreamEvent(raw, node) {
+  const dataLine = raw.split("\n").find((line) => line.startsWith("data: "));
+  if (!dataLine) return;
+  const event = JSON.parse(dataLine.slice(6));
+  if (event.event === "route") {
+    $("#chat-route").textContent = event.route;
+    $("#chat-model-runs").textContent = String(event.model_run_count);
+  }
+  if (event.event === "token") {
+    node.textContent += event.text;
+  }
+  if (event.event === "final") {
+    const result = event.data;
+    state.lastConversationId = result.conversation_id;
+    $("#chat-route").textContent = result.route;
+    $("#chat-model-runs").textContent = String(result.model_run_count);
+    $("#chat-source-count").textContent = String(result.context_bundle?.source_record_ids?.length || result.source_record_ids?.length || 0);
+    renderGuidance(result);
+    renderSourceChips(result.context_bundle?.source_record_ids || []);
+    refreshAll();
+  }
+}
+
+async function submitPlant(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    const result = await api("/api/v1/plants", {
+      method: "POST",
+      body: {
+        taxon: data.get("taxon"),
+        nickname: data.get("nickname"),
+        cultivar: data.get("cultivar"),
+        location_id: state.identity?.primary_location_id,
+        lifecycle_stage: "vegetative",
+      },
+    });
+    state.selectedPlantId = result.plant?.id;
+    toast("Plant created.");
+    await refreshAll();
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function submitObservation(event) {
+  event.preventDefault();
+  if (!state.selectedPlantId) return toast("Select a plant first.");
+  const data = new FormData(event.currentTarget);
+  try {
+    await api(`/api/v1/plants/${state.selectedPlantId}/observations`, {
+      method: "POST",
+      body: { text: data.get("text"), observed_facts: [{ label: data.get("text"), source: "manual alpha" }] },
+    });
+    toast("Observation added.");
+    await renderSelectedPlant();
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function runVision() {
+  const file = $("#vision-file").files[0] || $("#chat-image").files[0];
+  if (!file) return toast("Choose an image.");
+  await uploadAndAnalyzeImage(file, "vision");
+}
+
+async function uploadAndAnalyzeImage(file, origin) {
+  if (!state.selectedPlantId) return toast("Select a plant first.");
+  const imageBase64 = await fileToBase64(file);
+  $("#vision-status").textContent = "uploading";
+  const media = await api("/api/v1/vision/media", {
+    method: "POST",
+    body: {
+      image_base64: imageBase64,
+      content_type: file.type || "image/jpeg",
+      user_plant_id: state.selectedPlantId,
+    },
+  });
+  state.lastMediaId = media.id;
+  $("#vision-status").textContent = "analyzing";
+  const analysis = await api("/api/v1/vision/analyze", {
+    method: "POST",
+    body: {
+      media_attachment_id: media.id,
+      user_plant_id: state.selectedPlantId,
+      location_id: state.identity?.primary_location_id,
+    },
+  });
+  renderVision(analysis);
+  if (origin === "chat") appendMessage("assistant", `Image analysis status: ${analysis.provider_status}`);
+  await renderSelectedPlant();
+}
+
+async function submitSeason(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    const result = await api("/api/v1/season/plan", {
+      method: "POST",
+      body: {
+        crop_names: String(data.get("crops")).split(",").map((item) => item.trim()).filter(Boolean),
+        objective: data.get("goal"),
+        start_date: data.get("start"),
+        end_date: data.get("end"),
+        location_id: state.identity?.primary_location_id,
+        include_mercator: true,
+      },
+    });
+    state.lastSeasonPlanId = result.season_plan.id;
+    renderSeason(result);
+    toast("Season Plan created.");
+    await refreshAll();
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function previewCalendar() {
+  if (!state.lastSeasonPlanId) {
+    const plans = state.system?.persistence?.season_plan_count ? await api("/api/v1/season/plans") : { season_plans: [] };
+    state.lastSeasonPlanId = plans.season_plans?.[0]?.id;
+  }
+  if (!state.lastSeasonPlanId) return toast("Create a Season Plan first.");
+  try {
+    const preview = await api("/api/v1/calendar/preview", { method: "POST", body: { season_plan_id: state.lastSeasonPlanId } });
+    $("#season-output").textContent = JSON.stringify(preview, null, 2);
+    $("#calendar-state").textContent = "Preview ready - external writes: 0";
+  } catch (error) {
+    $("#calendar-state").textContent = "Google Calendar - Not connected";
+    toast(readableError(error));
+  }
+}
+
+async function submitResearchSearch(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    const result = await api("/api/v1/research/search", { method: "POST", body: { query: data.get("query"), limit: 5 } });
+    renderResearchSearch(result);
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function synthesizeResearch() {
+  const query = $("#research-form input[name='query']").value;
+  try {
+    const result = await api("/api/v1/research/synthesize", { method: "POST", body: { question: query, use_model: false } });
+    renderResearchSynthesis(result);
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function submitMovement(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    const result = await api("/api/v1/movement/check", {
+      method: "POST",
+      body: {
+        species: data.get("species"),
+        origin_alias: data.get("origin"),
+        destination_alias: data.get("destination"),
+        plant_part: data.get("plantPart"),
+        live_plant: data.get("livePlant") === "on",
+        soil_attached: data.get("soilAttached") === "on",
+        purpose: data.get("purpose"),
+      },
+    });
+    renderMovement(result);
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function submitMarkets(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    const result = await api("/api/v1/markets/context", { method: "POST", body: { commodity: data.get("commodity") } });
+    renderMarkets(result);
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+function renderStatus() {
+  $("#identity-label").textContent = state.identity?.label || "Development Identity";
+  $("#sidebar-spend").textContent = `$${Number(state.system?.cost?.total_development_cash_spent || 0).toFixed(2)}`;
+  $("#sidebar-db").textContent = state.status?.database || "SQLite";
+  $("#sidebar-model").textContent = state.status?.text_model || "unknown";
+}
+
+function renderPlants() {
+  $("#plant-count").textContent = String(state.plants.length);
+  const select = $("#plant-select");
+  select.innerHTML = "";
+  for (const plant of state.plants) {
+    const option = document.createElement("option");
+    option.value = plant.id;
+    option.textContent = plant.nickname;
+    option.selected = plant.id === state.selectedPlantId;
+    select.appendChild(option);
+  }
+  $("#plant-list").innerHTML = state.plants.map((plant) => plantCard(plant)).join("") || `<div class="empty">No plants.</div>`;
+  $$(".plant-card").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedPlantId = button.dataset.id;
+      renderPlants();
+      renderSelectedPlant();
+    });
+  });
+}
+
+async function renderSelectedPlant() {
+  const plantId = state.selectedPlantId;
+  if (!plantId) {
+    $("#plant-detail").innerHTML = `<div class="empty">No plant selected.</div>`;
+    $("#observation-list").innerHTML = "";
+    return;
+  }
+  try {
+    const detail = await api(`/api/v1/plants/${plantId}`);
+    const observations = await api(`/api/v1/plants/${plantId}/observations`);
+    $("#plant-detail").innerHTML = plantDetail(detail);
+    $("#observation-list").innerHTML = observations.map((item) => timelineItem(item.observed_at, item.text)).join("") || `<div class="empty">No observations.</div>`;
+  } catch (error) {
+    $("#plant-detail").innerHTML = `<div class="empty">${readableError(error)}</div>`;
+  }
+}
+
+function renderGuidance(result) {
+  if (result.guidance_plan_id) {
+    $("#guidance-card").innerHTML = `<strong>Saved GuidancePlan</strong><span>${result.guidance_plan_id}</span><p>${escapeHtml(result.content)}</p>`;
+  } else {
+    $("#guidance-card").textContent = result.validation_error || result.content || "No GuidancePlan persisted.";
+  }
+}
+
+async function renderSourceChips(sourceIds) {
+  const box = $("#chat-sources");
+  if (!sourceIds.length) {
+    box.innerHTML = "";
+    return;
+  }
+  try {
+    const payload = await api(`/api/v1/source-records?ids=${encodeURIComponent(sourceIds.join(","))}`);
+    box.innerHTML = payload.source_records.map((source) => `<span>${escapeHtml(source.provider)}: ${escapeHtml(source.title || source.authority || "source")}</span>`).join("");
+  } catch {
+    box.innerHTML = sourceIds.map((id) => `<span>${escapeHtml(id)}</span>`).join("");
+  }
+}
+
+function renderVision(result) {
+  const analysis = result.visual_analysis || {};
+  $("#vision-status").textContent = `${analysis.status || result.provider_status || "unknown"} - ${analysis.provider || "provider"}`;
+  $("#vision-observations").innerHTML = (analysis.visual_observations || []).map((item) => `<li>${escapeHtml(item.label)} <span>${escapeHtml(item.description || "")}</span></li>`).join("");
+  $("#vision-hypotheses").innerHTML = (analysis.visual_hypotheses || []).map((item) => `<li>${escapeHtml(item.label)} <span>${escapeHtml(item.status || "hypothesis")}</span></li>`).join("");
+  $("#vision-output").textContent = JSON.stringify(result, null, 2);
+}
+
+function renderSeason(result) {
+  const plan = result.season_plan || {};
+  state.lastSeasonPlanId = plan.id || state.lastSeasonPlanId;
+  $("#season-timeline").innerHTML = (result.actions || []).map((action) => timelineItem(action.preferred_at || action.earliest_at || "scheduled", action.title)).join("");
+  $("#season-output").textContent = JSON.stringify(result, null, 2);
+  $("#calendar-state").textContent = "Google Calendar - Not connected";
+}
+
+function renderResearchSearch(result) {
+  const providerStatuses = result.provider_statuses || [];
+  const works = result.works || [];
+  $("#research-quality").innerHTML = providerStatuses.map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+  $("#research-results").innerHTML = works.map((work) => sourceCard(work.title, `${work.journal || "unknown journal"} ${work.publication_year || ""}`, work.study_type || "unknown")).join("");
+  $("#research-output").textContent = JSON.stringify(result, null, 2);
+}
+
+function renderResearchSynthesis(result) {
+  $("#research-quality").innerHTML = `<span>${escapeHtml(result.evidence_quality || "unknown")}</span><span>${escapeHtml(result.model_confidence || "not_model_generated")}</span>`;
+  $("#research-results").innerHTML = [
+    ...((result.supporting_claims || []).map((claim) => sourceCard(claim.statement, "supporting", claim.evidence_quality))),
+    ...((result.contradictory_claims || []).map((claim) => sourceCard(claim.statement, "contradictory", claim.evidence_quality))),
+  ].join("");
+  $("#research-output").textContent = JSON.stringify(result, null, 2);
+}
+
+function renderMovement(result) {
+  $("#movement-status").textContent = result.status || "UNRESOLVED";
+  $("#movement-status").dataset.status = result.status || "UNRESOLVED";
+  $("#movement-rules").innerHTML = (result.applicable_rules || []).map((rule) => sourceCard(rule.rule_id, rule.authority, rule.jurisdiction_pack)).join("") || `<div class="empty">No applicable rules.</div>`;
+  $("#movement-output").textContent = JSON.stringify(result, null, 2);
+}
+
+function renderMarkets(result) {
+  const dates = result.data_dates || {};
+  $("#market-metrics").innerHTML = [
+    metric("Commodity", result.commodity?.canonical_name || "unknown"),
+    metric("Production", (dates.production || []).join(", ") || "unavailable"),
+    metric("Markets", (dates.markets || []).join(", ") || "unavailable"),
+    metric("Freshness", result.freshness?.markets || "unavailable"),
+  ].join("");
+  $("#markets-output").textContent = JSON.stringify(result, null, 2);
+}
+
+function renderSystem() {
+  const status = state.system || {};
+  $("#system-list").innerHTML = [
+    metricRow("UI", status.ui_url),
+    metricRow("API", status.api_url),
+    metricRow("Database", status.database),
+    metricRow("Text model", status.text_model),
+    metricRow("Vision model", status.vision_model),
+    metricRow("Automatic paid usage", "OFF"),
+    metricRow("Spend", `$${Number(status.cost?.total_development_cash_spent || 0).toFixed(2)}`),
+    metricRow("Reserve", `$${Number(status.cost?.reserve_remaining || 20).toFixed(2)}`),
+    metricRow("Telemetry", status.telemetry),
+    metricRow("Git", status.git_commit),
+  ].join("");
+  $("#provider-list").innerHTML = (status.providers || []).map((provider) => sourceCard(provider.provider_id, provider.enabled ? provider.mode : "disabled", provider.billing_class)).join("");
+  $("#persistence-list").innerHTML = Object.entries(status.persistence || {}).map(([key, value]) => metricRow(key, value)).join("");
 }
 
 function appendMessage(role, text) {
   const node = document.createElement("article");
   node.className = `message ${role}`;
   node.textContent = text;
-  messages.appendChild(node);
-  messages.scrollTop = messages.scrollHeight;
+  $("#messages").appendChild(node);
+  $("#messages").scrollTop = $("#messages").scrollHeight;
   return node;
 }
 
-async function streamText(node, text) {
-  node.textContent = "";
-  for (let index = 0; index < text.length; index += 16) {
-    node.textContent += text.slice(index, index + 16);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+async function api(path, options = {}) {
+  const init = { method: options.method || "GET", headers: { ...(options.headers || {}) } };
+  if (options.body !== undefined) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(options.body);
   }
+  const response = await fetch(path, init);
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok) throw new Error(payload.message || payload.status || `HTTP ${response.status}`);
+  return payload;
 }
 
-function renderPlants() {
-  plantList.innerHTML = "";
-  for (const plant of plants) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "plant-card";
-    button.innerHTML = `<strong>${plant.nickname}</strong><span>${plant.species}${plant.cultivar ? ` - ${plant.cultivar}` : ""}</span>`;
-    button.addEventListener("click", () => selectPlant(plant));
-    plantList.appendChild(button);
-  }
+function previewVisionFile() {
+  const file = $("#vision-file").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    $("#image-preview").innerHTML = `<img src="${reader.result}" alt="Selected plant" />`;
+  };
+  reader.readAsDataURL(file);
 }
 
-function selectPlant(plant) {
-  selectedPlant = plant;
-  selectedPlantName.textContent = plant.nickname;
-  detailName.textContent = plant.nickname;
-  detailSpecies.textContent = `${plant.species}${plant.cultivar ? ` - ${plant.cultivar}` : ""}`;
-  detailStage.textContent = plant.lifecycle_stage;
-  detailProfile.textContent = plant.profile;
-  sources.textContent = String(plant.source_count);
-  observations.innerHTML = "";
-  for (const observation of plant.observations) {
-    const item = document.createElement("li");
-    item.textContent = observation;
-    observations.appendChild(item);
-  }
-  visionStatus.textContent = plant.vision?.status || "idle";
-  visionProvider.textContent = plant.vision?.provider || "none";
-  visionOutput.textContent = JSON.stringify(plant.vision || {}, null, 2);
-  evidenceOutput.textContent = JSON.stringify(plant.evidence || {}, null, 2);
-  sentinelStatus.textContent = plant.sentinel?.status || "UNRESOLVED";
-  sentinelFreshness.textContent = `freshness: ${plant.sentinel?.freshness || "idle"}`;
-  sentinelOutput.textContent = JSON.stringify(plant.sentinel || {}, null, 2);
-  renderSeason(plant.season);
-  renderMercator(plant.mercator);
-  renderInstitution(plant.institution);
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
-function renderSeason(plan) {
-  const safePlan = plan || { confidence: "PROVISIONAL", window: "no plan", actions: [] };
-  seasonConfidence.textContent = safePlan.confidence;
-  seasonWindow.textContent = safePlan.window;
-  seasonTimeline.innerHTML = "";
-  for (const action of safePlan.actions) {
-    const item = document.createElement("li");
-    item.innerHTML = `<strong>${action.date}</strong><span>${action.title}</span>`;
-    seasonTimeline.appendChild(item);
-  }
-  seasonOutput.textContent = JSON.stringify(safePlan, null, 2);
+function plantCard(plant) {
+  const active = plant.id === state.selectedPlantId ? " active" : "";
+  return `<button class="plant-card${active}" data-id="${plant.id}" type="button"><strong>${escapeHtml(plant.nickname)}</strong><span>${escapeHtml(plant.cultivar || plant.lifecycle_stage || "plant")}</span></button>`;
 }
 
-function renderMercator(context) {
-  const safeContext = context || { production_statistics: [], price_observations: [], supply_chain_context: [] };
-  const report = safeContext.price_observations[0] || {};
-  mercatorFreshness.textContent = report.freshness || "unavailable";
-  mercatorDate.textContent = report.report_date ? `report date: ${report.report_date}` : "no report date";
-  mercatorOutput.textContent = JSON.stringify(safeContext, null, 2);
+function plantDetail(detail) {
+  const plant = detail.plant || {};
+  const entity = detail.plant_entity || {};
+  const profile = detail.plant_profile || {};
+  return `
+    <dl class="metric-list">
+      ${metricRow("Nickname", plant.nickname)}
+      ${metricRow("Scientific name", entity.scientific_name)}
+      ${metricRow("Cultivar", plant.cultivar || "unknown")}
+      ${metricRow("Stage", plant.lifecycle_stage || "unknown")}
+      ${metricRow("Status", plant.status)}
+      ${metricRow("Profile completeness", profile.completeness ?? "unknown")}
+    </dl>
+  `;
 }
 
-function renderInstitution(context) {
-  const safeContext = context || { policy: {}, projects: [], run: {}, review: {} };
-  researchStatus.textContent = safeContext.run?.status || "idle";
-  researchPolicy.textContent = `policy: ${safeContext.policy?.deployment_mode || "local"}`;
-  institutionOutput.textContent = JSON.stringify(safeContext, null, 2);
+function timelineItem(date, text) {
+  return `<div class="timeline-item"><strong>${escapeHtml(date || "undated")}</strong><span>${escapeHtml(text || "")}</span></div>`;
 }
 
-renderPlants();
-selectPlant(selectedPlant);
+function sourceCard(title, meta, badge) {
+  return `<article class="source-card"><strong>${escapeHtml(title || "Untitled")}</strong><span>${escapeHtml(meta || "")}</span><em>${escapeHtml(badge || "")}</em></article>`;
+}
+
+function metric(label, value) {
+  return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function metricRow(label, value) {
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value ?? "unknown")}</dd></div>`;
+}
+
+function toast(message) {
+  const node = $("#toast");
+  node.textContent = message;
+  node.classList.add("show");
+  setTimeout(() => node.classList.remove("show"), 3200);
+}
+
+function readableError(error) {
+  const text = String(error.message || error);
+  if (text.includes("provider")) return `Provider unavailable: ${text}`;
+  if (text.includes("denied")) return `Policy denied the request: ${text}`;
+  if (text.includes("calendar")) return `Calendar disconnected: ${text}`;
+  if (text.includes("image")) return `Invalid image: ${text}`;
+  return text;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
