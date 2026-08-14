@@ -145,10 +145,11 @@ class GuidanceWorkflowGraph:
             route = "reasoning"
         if route == "season" and (self.orchestrator.season is None or self.orchestrator.season_context_provider is None):
             route = "reasoning"
-        return {"route": route}
+        return {**state, "route": route}
 
     async def _geography_node(self, state: JsonDict) -> JsonDict:
         return {
+            **state,
             "result": await self.orchestrator._handle_geography(
                 state["context"],
                 state["conversation_id"],
@@ -159,6 +160,7 @@ class GuidanceWorkflowGraph:
 
     async def _environment_node(self, state: JsonDict) -> JsonDict:
         return {
+            **state,
             "result": await self.orchestrator._handle_environment(
                 state["context"],
                 state["conversation_id"],
@@ -169,6 +171,7 @@ class GuidanceWorkflowGraph:
 
     async def _economics_node(self, state: JsonDict) -> JsonDict:
         return {
+            **state,
             "result": await self.orchestrator._handle_economics(
                 state["context"],
                 state["conversation_id"],
@@ -181,6 +184,7 @@ class GuidanceWorkflowGraph:
 
     async def _season_node(self, state: JsonDict) -> JsonDict:
         return {
+            **state,
             "result": await self.orchestrator._handle_season(
                 state["context"],
                 state["conversation_id"],
@@ -192,6 +196,7 @@ class GuidanceWorkflowGraph:
 
     async def _reasoning_node(self, state: JsonDict) -> JsonDict:
         return {
+            **state,
             "result": await self.orchestrator._handle_reasoning(
                 state["context"],
                 state["conversation_id"],
