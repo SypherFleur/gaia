@@ -6,7 +6,7 @@ import sqlite3
 import subprocess
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -203,6 +203,7 @@ class GaiaRuntime:
     provider_modes: AlphaProviderModes
     database_url: str = DEFAULT_SQLITE_URL
     sovereign: bool = False
+    fixture_defaults: bool = False
     text_model: str = "llama3.1:latest"
     vision_model: str = "llava:latest"
     live_regulatory_probes: dict[str, object] = field(default_factory=dict)
@@ -386,6 +387,7 @@ def create_runtime(
         provider_modes=modes,
         database_url=database,
         sovereign=sovereign,
+        fixture_defaults=fixture_defaults,
         text_model=os.environ.get("GAIA_OLLAMA_MODEL", "llama3.1:latest"),
         vision_model=os.environ.get("GAIA_LLAVA_MODEL", "llava:latest"),
         live_regulatory_probes=live_regulatory_probes,
@@ -447,7 +449,7 @@ def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool =
         primary_location_id = aliases["tx-austin"]
         repository.set_workspace_default_location(organization_id, workspace_id, primary_location_id)
     else:
-        aliases = existing_cli_location_aliases(repository, organization_id)
+        aliases = {}
         primary_location_id = _active_real_location_id(repository, organization_id, workspace_id)
         repository.set_workspace_default_location(organization_id, workspace_id, primary_location_id)
 
@@ -691,31 +693,53 @@ async def set_active_location(
         location = runtime.repository.get_location(runtime.organization_id, location_id)
         if location is None:
             raise PermissionError("Location is missing or inaccessible")
+        if not _runtime_allows_demo_locations(runtime) and (bool(location.get("is_demo")) or location.get("source_kind") == "demo_fixture"):
+            raise ValueError("demo_location_unavailable_in_normal_runtime")
     else:
         if latitude is None or longitude is None:
             raise ValueError("latitude_and_longitude_required")
         if source_kind not in {"device", "manual", "saved"}:
             raise ValueError("active_location_must_be_device_manual_or_saved")
-        admin = await CLIGeographyProvider(fixture=False).resolve_admin(latitude, longitude)
-        location_obj = Location(
+        source_label = {
+            "device": "browser geolocation permission",
+            "manual": "user-entered location",
+            "saved": "user-saved real location",
+        }[source_kind]
+        default_label = {
+            "device": "Device location",
+            "manual": "Manual location",
+            "saved": "Saved location",
+        }[source_kind]
+        candidate = Location(
             organization_id=runtime.organization_id,
-            label=label or ("Device location" if source_kind == "device" else "Manual location"),
+            label=label or default_label,
             latitude=latitude,
             longitude=longitude,
             accuracy_m=accuracy_m,
             privacy_precision="1km",
             exact_coordinates_authorized=source_kind == "device",
-            timezone=admin.timezone or "UTC",
-            country_code=admin.country_code or "US",
-            admin1=admin.state_code,
-            admin2=admin.county_or_district,
-            county_fips=admin.county_fips,
+            timezone="UTC",
+            country_code="US",
             source_kind=source_kind,
-            source_label="browser geolocation permission" if source_kind == "device" else "user-entered location",
+            source_label=source_label,
             is_demo=False,
             verified_at=now_iso(),
         )
+        atlas_result = await runtime.atlas.build_geo_context(candidate, persist=False)
+        geo = atlas_result.geo_context
+        if not geo.state_code or not geo.county_or_district:
+            raise ValueError("location_resolution_unavailable")
+        location_obj = replace(
+            candidate,
+            timezone=geo.timezone or candidate.timezone,
+            country_code=geo.country_code or candidate.country_code,
+            admin1=geo.state_code,
+            admin2=geo.county_or_district,
+            county_fips=geo.county_fips,
+            elevation_m=geo.elevation_m,
+        )
         location = asdict(runtime.repository.create_location(location_obj))
+        runtime.repository.create_geo_context(geo)
     runtime.repository.set_workspace_default_location(runtime.organization_id, runtime.workspace_id, location["id"])
     runtime.primary_location_id = location["id"]
     return {"status": "ok", "active_location": runtime.repository.get_location(runtime.organization_id, location["id"])}
@@ -723,11 +747,16 @@ async def set_active_location(
 
 def locations_payload(runtime: GaiaRuntime) -> dict:
     active = runtime.repository.get_location(runtime.organization_id, runtime.primary_location_id) if runtime.primary_location_id else None
+    locations = runtime.repository.list_locations(runtime.organization_id)
+    if not _runtime_allows_demo_locations(runtime):
+        locations = [location for location in locations if _is_real_location(location)]
+        if active is not None and not _is_real_location(active):
+            active = None
     return {
-        "active_location_id": runtime.primary_location_id,
+        "active_location_id": active["id"] if active else None,
         "active_location": active,
-        "locations": runtime.repository.list_locations(runtime.organization_id),
-        "location_aliases": runtime.location_aliases,
+        "locations": locations,
+        "location_aliases": runtime.location_aliases if _runtime_allows_demo_locations(runtime) else {},
         "semantics": {
             "device": "Browser geolocation granted by the user for this local alpha session.",
             "manual": "Coordinates or place entered by the user.",
@@ -735,6 +764,17 @@ def locations_payload(runtime: GaiaRuntime) -> dict:
             "demo_fixture": "Explicit demo/test location; never current device location.",
         },
     }
+
+
+def _runtime_allows_demo_locations(runtime: GaiaRuntime) -> bool:
+    if runtime.fixture_defaults:
+        return True
+    workspace = runtime.repository.get_workspace(runtime.organization_id, runtime.workspace_id) or {}
+    return workspace.get("name") == "Demo Workspace" or bool((workspace.get("knowledge_policy") or {}).get("demo_only"))
+
+
+def _is_real_location(location: dict) -> bool:
+    return not bool(location.get("is_demo")) and location.get("source_kind") in {"device", "manual", "saved"}
 
 
 def public_geography_for_location(runtime: GaiaRuntime, location_id: str | None) -> dict:
@@ -1162,6 +1202,8 @@ class CLIGeographyProvider:
             return self._admin("Texas", "TX", "Harris County", "48201", "America/Chicago")
         if 25.0 <= latitude <= 27.0 and -99.0 <= longitude <= -96.0:
             return self._admin("Texas", "TX", "Hidalgo County", "48215", "America/Chicago")
+        if not self.fixture:
+            return self._unresolved(latitude, longitude)
         return self._admin("Texas", "TX", "Travis County", "48453", "America/Chicago")
 
     def _admin(self, state: str, state_code: str, county: str, fips: str, timezone: str) -> AdminResolution:
@@ -1184,6 +1226,30 @@ class CLIGeographyProvider:
                     license="fixture" if self.fixture else "local-deterministic",
                     attribution="GAIA fixture" if self.fixture else "GAIA local deterministic resolver",
                     content_hash=content_hash([state_code, county]),
+                )
+            ],
+        )
+
+    def _unresolved(self, latitude: float, longitude: float) -> AdminResolution:
+        return AdminResolution(
+            status=ProviderStatus("UNAVAILABLE", "coordinate_outside_local_admin_fixture_coverage"),
+            country=None,
+            country_code=None,
+            state_or_region=None,
+            state_code=None,
+            county_or_district=None,
+            county_fips=None,
+            timezone=None,
+            provenance=[
+                ProvenanceRecord(
+                    provider=self.provider_id,
+                    external_record_id=f"unresolved:{round(latitude, 4)}:{round(longitude, 4)}",
+                    canonical_url="local://gaia/admin-geography/unresolved",
+                    authority="GAIA local deterministic admin geography",
+                    geographic_scope="unresolved",
+                    license="local-deterministic",
+                    attribution="GAIA local deterministic resolver",
+                    content_hash=content_hash([latitude, longitude, "unresolved"]),
                 )
             ],
         )

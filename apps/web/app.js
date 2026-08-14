@@ -38,6 +38,7 @@ function bindNavigation() {
   $("#refresh").addEventListener("click", refreshAll);
   $("#seed-demo").addEventListener("click", seedDemo);
   $("#device-location").addEventListener("click", useDeviceLocation);
+  $("#manual-location").addEventListener("click", enterManualLocation);
   $("#ask-about-plant").addEventListener("click", () => {
     showView("chat");
     $("#chat-input").value = "What should I do for this plant today?";
@@ -129,7 +130,7 @@ async function useDeviceLocation() {
   $("#device-location").disabled = true;
   try {
     const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 12000, maximumAge: 600000 });
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 600000 });
     });
     const { latitude, longitude, accuracy } = position.coords;
     const result = await api("/api/v1/locations/active", {
@@ -149,6 +150,34 @@ async function useDeviceLocation() {
     toast(error.message || "Location permission was not granted.");
   } finally {
     $("#device-location").disabled = false;
+  }
+}
+
+async function enterManualLocation() {
+  const coordinateText = window.prompt("Enter latitude and longitude, separated by a comma.");
+  if (!coordinateText) return;
+  const [latitudeText, longitudeText] = coordinateText.split(",").map((item) => item.trim());
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return toast("Enter coordinates like 29.7604, -95.3698.");
+  }
+  const label = window.prompt("Name this location.", "Manual location") || "Manual location";
+  try {
+    const result = await api("/api/v1/locations/active", {
+      method: "POST",
+      body: {
+        source_kind: "manual",
+        label,
+        latitude,
+        longitude,
+      },
+    });
+    state.activeLocationId = result.active_location?.id || null;
+    toast(locationToast(result.active_location));
+    await refreshAll();
+  } catch (error) {
+    toast(readableError(error));
   }
 }
 
@@ -399,18 +428,29 @@ function renderStatus() {
 function renderLocations() {
   const select = $("#location-select");
   const locations = state.locations?.locations || [];
-  select.innerHTML = `<option value="">No active real location</option>`;
+  const active = state.locations?.active_location;
+  select.innerHTML = `<option value="">Saved locations</option>`;
   for (const location of locations) {
     const option = document.createElement("option");
     option.value = location.id;
-    option.textContent = `${location.label} - ${location.source_kind || "saved"}`;
+    option.textContent = `${locationLabel(location)} - ${locationKindLabel(location.source_kind)}`;
     option.selected = location.id === state.activeLocationId;
     select.appendChild(option);
   }
-  const active = state.locations?.active_location;
+  select.classList.toggle("hidden", locations.length === 0);
   select.title = active
     ? `${active.source_kind}: ${active.admin2 || active.label}`
-    : "No active location. Use browser location or select a saved/demo location.";
+    : "No active location. Use browser location, enter a location, or select a saved real location.";
+
+  if (!active) {
+    $("#location-primary").textContent = "Location required";
+    $("#location-secondary").textContent = "Use current location or enter location manually.";
+    $("#location-accuracy").textContent = "";
+    return;
+  }
+  $("#location-primary").textContent = locationLabel(active);
+  $("#location-secondary").textContent = locationKindLabel(active.source_kind);
+  $("#location-accuracy").textContent = active.accuracy_m ? `Accuracy: ~${formatMeters(active.accuracy_m)} m` : "";
 }
 
 function renderPlants() {
@@ -627,10 +667,37 @@ function activeLocationId() {
   return state.activeLocationId || null;
 }
 
+function locationLabel(location) {
+  const county = location?.admin2 || location?.label || "Location";
+  const state = stateName(location?.admin1);
+  return state ? `${county}, ${state}` : county;
+}
+
+function stateName(code) {
+  return {
+    CA: "California",
+    FL: "Florida",
+    GA: "Georgia",
+    TX: "Texas",
+  }[String(code || "").toUpperCase()] || "";
+}
+
+function locationKindLabel(sourceKind) {
+  if (sourceKind === "device") return "Device location";
+  if (sourceKind === "manual") return "Manual location";
+  if (sourceKind === "demo_fixture") return "Demo fixture location";
+  return "Saved location";
+}
+
+function formatMeters(value) {
+  const meters = Number(value);
+  if (!Number.isFinite(meters)) return "";
+  return String(Math.round(meters));
+}
+
 function locationToast(location) {
   if (!location) return "No active location selected.";
-  const county = location.admin2 ? `, ${location.admin2}` : "";
-  return `${location.source_kind || "saved"} location active${county}.`;
+  return `${locationKindLabel(location.source_kind)} active: ${locationLabel(location)}.`;
 }
 
 function toast(message) {

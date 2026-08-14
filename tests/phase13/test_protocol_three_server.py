@@ -95,10 +95,15 @@ class ProtocolThreeServerTest(unittest.TestCase):
 
                 self.assertIn("GAIA Local Alpha", html)
                 self.assertIn('data-view="chat"', html)
+                self.assertIn("Location required", html)
+                self.assertIn("Use current location", html)
+                self.assertIn("Enter location", html)
                 self.assertIn("/api/v1/chat/stream", javascript)
                 self.assertIn("/api/v1/seed/demo", javascript)
+                self.assertIn("source_kind: \"device\"", javascript)
                 self.assertIn("automatic_paid_usage_enabled", javascript)
                 self.assertIn(".app-shell", stylesheet)
+                self.assertIn(".location-status", stylesheet)
                 self.assertNotIn("Core chat and context diagnostics", html)
                 self.assertNotIn("static demo", javascript.lower())
             finally:

@@ -5,7 +5,19 @@ import tempfile
 from pathlib import Path
 
 from apps.api.gaia_api.chat_api import post_chat
-from apps.api.gaia_api.runtime import AlphaProviderModes, cost_status, create_runtime, doctor_report, provider_health_rows, seed_demo, set_active_location, source_reconciliation_report
+from apps.api.gaia_api.runtime import (
+    AlphaProviderModes,
+    architecture_summary,
+    cost_status,
+    create_runtime,
+    doctor_report,
+    locations_payload,
+    provider_health_rows,
+    seed_cli_locations,
+    seed_demo,
+    set_active_location,
+    source_reconciliation_report,
+)
 
 
 class ProtocolThreeRuntimeTest(unittest.TestCase):
@@ -108,6 +120,29 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
                 self.assertEqual(runtime.provider_modes.usda_soil, "disabled")
                 self.assertEqual(runtime.location_aliases, {})
                 self.assertEqual(runtime.repository.list_locations(runtime.organization_id), [])
+                architecture = architecture_summary(runtime)
+                self.assertIsNone(architecture["location"]["active_location"])
+                self.assertEqual(architecture["location"]["locations"], [])
+            finally:
+                runtime.close()
+
+    def test_no_location_chat_requires_location_and_creates_zero_model_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            runtime = create_runtime(f"sqlite:///{db_path}")
+            try:
+                result = run(
+                    post_chat(
+                        runtime.orchestrator,
+                        runtime.context(request_id="phase13-no-location"),
+                        message="What county am I in?",
+                        location_id=runtime.primary_location_id,
+                    )
+                )
+
+                self.assertEqual(result["route"], "location_required")
+                self.assertEqual(result["model_run_count"], 0)
+                self.assertEqual(_model_run_count(runtime), 0)
             finally:
                 runtime.close()
 
@@ -125,6 +160,7 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
                 )
             )
             self.assertEqual(payload["active_location"]["source_kind"], "device")
+            self.assertEqual(payload["active_location"]["accuracy_m"], 1200)
             self.assertEqual(payload["active_location"]["admin2"], "Harris County")
 
             result = run(
@@ -140,6 +176,178 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
             self.assertNotIn("Travis County", result["content"])
         finally:
             runtime.close()
+
+    def test_device_location_uses_atlas_and_persists_geography(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            runtime = create_runtime(f"sqlite:///{db_path}")
+            try:
+                payload = run(
+                    set_active_location(
+                        runtime,
+                        source_kind="device",
+                        label="Browser device",
+                        latitude=29.7604,
+                        longitude=-95.3698,
+                        accuracy_m=42,
+                    )
+                )
+                location = payload["active_location"]
+                geo_rows = runtime.connection.execute(
+                    "SELECT state_code, county_or_district, county_fips FROM geo_contexts WHERE organization_id = ? AND location_id = ?",
+                    (runtime.organization_id, location["id"]),
+                ).fetchall()
+
+                self.assertEqual(location["source_kind"], "device")
+                self.assertEqual(location["admin1"], "TX")
+                self.assertEqual(location["admin2"], "Harris County")
+                self.assertEqual(location["county_fips"], "48201")
+                self.assertEqual(len(geo_rows), 1)
+                self.assertEqual(geo_rows[0]["county_or_district"], "Harris County")
+                self.assertEqual(locations_payload(runtime)["active_location"]["source_kind"], "device")
+            finally:
+                runtime.close()
+
+    def test_reference_locations_are_hidden_and_inactive_in_normal_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            database = f"sqlite:///{db_path}"
+            runtime = create_runtime(database)
+            try:
+                aliases = seed_cli_locations(runtime.repository, runtime.organization_id)
+                runtime.repository.set_workspace_default_location(runtime.organization_id, runtime.workspace_id, aliases["tx-austin"])
+            finally:
+                runtime.close()
+
+            restarted = create_runtime(database)
+            try:
+                payload = locations_payload(restarted)
+
+                self.assertIsNone(restarted.primary_location_id)
+                self.assertEqual(restarted.location_aliases, {})
+                self.assertIsNone(payload["active_location"])
+                self.assertEqual(payload["locations"], [])
+                self.assertEqual(payload["location_aliases"], {})
+            finally:
+                restarted.close()
+
+    def test_demo_locations_remain_isolated_from_normal_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            database = f"sqlite:///{db_path}"
+            runtime = create_runtime(database, provider_modes=AlphaProviderModes(text_model="fixture", vision_model="fixture"))
+            try:
+                normal_workspace_id = runtime.workspace_id
+                seed_demo(runtime)
+                demo_locations = runtime.repository.list_locations(runtime.organization_id)
+
+                self.assertTrue(demo_locations)
+                self.assertTrue(all(location["source_kind"] == "demo_fixture" for location in demo_locations))
+                self.assertTrue(all(bool(location["is_demo"]) for location in demo_locations))
+            finally:
+                runtime.close()
+
+            restarted = create_runtime(database)
+            try:
+                self.assertEqual(restarted.workspace_id, normal_workspace_id)
+                self.assertIsNone(restarted.primary_location_id)
+                self.assertEqual(locations_payload(restarted)["locations"], [])
+            finally:
+                restarted.close()
+
+    def test_saved_location_does_not_override_new_device_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            database = f"sqlite:///{db_path}"
+            runtime = create_runtime(database)
+            try:
+                saved = run(
+                    set_active_location(
+                        runtime,
+                        source_kind="saved",
+                        label="Saved real location",
+                        latitude=29.72,
+                        longitude=-95.4,
+                        accuracy_m=800,
+                    )
+                )
+                device = run(
+                    set_active_location(
+                        runtime,
+                        source_kind="device",
+                        label="Current browser device",
+                        latitude=29.7604,
+                        longitude=-95.3698,
+                        accuracy_m=35,
+                    )
+                )
+
+                self.assertEqual(saved["active_location"]["source_kind"], "saved")
+                self.assertEqual(device["active_location"]["source_kind"], "device")
+                self.assertEqual(runtime.primary_location_id, device["active_location"]["id"])
+            finally:
+                runtime.close()
+
+            restarted = create_runtime(database)
+            try:
+                active = locations_payload(restarted)["active_location"]
+
+                self.assertIsNotNone(active)
+                self.assertEqual(active["source_kind"], "device")
+                self.assertEqual(active["admin2"], "Harris County")
+            finally:
+                restarted.close()
+
+    def test_restart_preserves_explicit_saved_real_location(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            database = f"sqlite:///{db_path}"
+            runtime = create_runtime(database)
+            try:
+                saved = run(
+                    set_active_location(
+                        runtime,
+                        source_kind="saved",
+                        label="Home garden",
+                        latitude=29.7604,
+                        longitude=-95.3698,
+                        accuracy_m=250,
+                    )
+                )
+                saved_id = saved["active_location"]["id"]
+            finally:
+                runtime.close()
+
+            restarted = create_runtime(database)
+            try:
+                payload = locations_payload(restarted)
+
+                self.assertEqual(restarted.primary_location_id, saved_id)
+                self.assertEqual(payload["active_location"]["source_kind"], "saved")
+                self.assertEqual(payload["active_location"]["admin2"], "Harris County")
+                self.assertEqual(len(payload["locations"]), 1)
+            finally:
+                restarted.close()
+
+    def test_unknown_normal_coordinate_does_not_fall_back_to_travis(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "gaia.sqlite3"
+            runtime = create_runtime(f"sqlite:///{db_path}")
+            try:
+                with self.assertRaisesRegex(ValueError, "location_resolution_unavailable"):
+                    run(
+                        set_active_location(
+                            runtime,
+                            source_kind="device",
+                            label="Unknown coordinate",
+                            latitude=40.7128,
+                            longitude=-74.0060,
+                            accuracy_m=50,
+                        )
+                    )
+                self.assertEqual(locations_payload(runtime)["locations"], [])
+            finally:
+                runtime.close()
 
     def test_disabled_provider_mode_does_not_execute_fixture_adapter(self) -> None:
         runtime = create_runtime(
@@ -187,6 +395,11 @@ def run(coro):
     import asyncio
 
     return asyncio.run(coro)
+
+
+def _model_run_count(runtime) -> int:
+    row = runtime.connection.execute("SELECT COUNT(*) AS count FROM model_runs").fetchone()
+    return int(row["count"])
 
 
 if __name__ == "__main__":

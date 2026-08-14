@@ -3,7 +3,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from apps.cli.gaia import main
 
@@ -52,6 +54,18 @@ class GaiaCLITest(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn(payload["orchestration"]["graph"]["engine"], {"langgraph", "langgraph-compatible-local"})
         self.assertTrue(payload["orchestration"]["legacy_custom_orchestrator_preserved"])
+
+    def test_architecture_command_shows_clean_normal_location_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stream = io.StringIO()
+            database = f"sqlite:///{Path(directory) / 'gaia-clean.sqlite3'}"
+            with contextlib.redirect_stdout(stream):
+                code = main(["--database", database, "architecture"])
+            payload = json.loads(stream.getvalue())
+
+        self.assertEqual(code, 0)
+        self.assertIsNone(payload["location"]["active_location"])
+        self.assertEqual(payload["location"]["locations"], [])
 
     def test_sources_list_reports_kew_and_cash_status(self) -> None:
         code, payload = invoke("sources", "list")

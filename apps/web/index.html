@@ -46,9 +46,17 @@
             <p id="view-subtitle">Local alpha workspace</p>
           </div>
           <div class="topbar-controls">
-            <div class="location-control">
+            <div class="location-panel" aria-live="polite">
+              <div class="location-status">
+                <strong id="location-primary">Location required</strong>
+                <span id="location-secondary">Use current location or enter location manually.</span>
+                <span id="location-accuracy"></span>
+              </div>
+              <div class="location-control">
+                <button id="device-location" type="button" title="Use browser device location">Use current location</button>
+                <button id="manual-location" type="button" title="Enter latitude and longitude">Enter location</button>
+              </div>
               <select id="location-select" aria-label="Active location"></select>
-              <button id="device-location" type="button" title="Use browser device location">Locate</button>
             </div>
             <select id="plant-select" aria-label="Selected plant"></select>
             <button id="seed-demo" type="button">Seed Demo</button>
