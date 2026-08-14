@@ -9,7 +9,8 @@
     "test": "py -3.13 -m unittest discover -s tests -p test_*.py",
     "eval": "py -3.13 scripts/eval/run_eval_smoke.py",
     "gaia": "py -3.13 -m apps.cli.gaia",
-    "seed": "py -3.13 scripts/bootstrap/seed_placeholder.py",
+    "seed": "py -3.13 -m apps.cli.gaia seed demo",
+    "dev": "py -3.13 -m apps.cli.gaia dev",
     "env": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap/check_environment.ps1"
   },
   "engines": {

@@ -15,7 +15,7 @@ gaia:
 	py -3.13 -m apps.cli.gaia
 
 seed:
-	py -3.13 scripts/bootstrap/seed_placeholder.py
+	py -3.13 -m apps.cli.gaia seed demo
 
 dev:
-	docker compose up
+	py -3.13 -m apps.cli.gaia dev

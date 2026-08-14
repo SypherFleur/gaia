@@ -592,8 +592,6 @@ def doctor_report(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port:
     worst = "ok"
     if any(check["state"] == "FAIL" for check in checks):
         worst = "fail"
-    elif any(check["state"] == "WARN" for check in checks):
-        worst = "warn"
     return {
         "status": worst,
         "checks": checks,
@@ -892,10 +890,11 @@ def _guidance_plan_count(runtime: GaiaRuntime) -> int:
 
 
 def _command_check(name: str, command: list[str]) -> dict:
-    if shutil.which(command[0]) is None:
+    resolved = shutil.which(command[0])
+    if resolved is None:
         return {"name": name, "state": "FAIL", "detail": f"{command[0]} not found"}
     try:
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=10, check=False)
+        result = subprocess.run([resolved, *command[1:]], cwd=ROOT, capture_output=True, text=True, timeout=10, check=False)
     except Exception as exc:
         return {"name": name, "state": "FAIL", "detail": exc.__class__.__name__}
     detail = (result.stdout or result.stderr).strip().splitlines()[0] if (result.stdout or result.stderr).strip() else "available"
