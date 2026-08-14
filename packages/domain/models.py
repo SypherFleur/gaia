@@ -138,6 +138,10 @@ class Location(EntityMetadata):
     admin1: str | None = None
     admin2: str | None = None
     county_fips: str | None = None
+    source_kind: str = "saved"
+    source_label: str | None = None
+    is_demo: bool = False
+    verified_at: str | None = None
 
 
 @dataclass(slots=True)

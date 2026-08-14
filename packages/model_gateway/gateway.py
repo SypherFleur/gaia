@@ -87,6 +87,8 @@ class ModelGateway:
             provider = self.registry.get(provider_id)
         except KeyError:
             return "model_provider_unknown"
+        if not provider.enabled:
+            return "model_provider_disabled"
         if provider.provider_type.value != "MODEL":
             return "provider_is_not_model"
         if provider.remote:

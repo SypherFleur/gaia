@@ -213,8 +213,9 @@ class GaiaRepository:
             INSERT INTO locations (
                 id, organization_id, label, latitude, longitude, elevation_m, accuracy_m,
                 privacy_precision, exact_coordinates_authorized, timezone, country_code,
-                admin1, admin2, county_fips, retention_policy, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                admin1, admin2, county_fips, source_kind, source_label, is_demo, verified_at,
+                retention_policy, created_at, updated_at, deleted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 location.id,
@@ -231,6 +232,10 @@ class GaiaRepository:
                 location.admin1,
                 location.admin2,
                 location.county_fips,
+                location.source_kind,
+                location.source_label,
+                1 if location.is_demo else 0,
+                location.verified_at,
                 _json(location.retention_policy),
                 location.created_at,
                 location.updated_at,
@@ -1073,6 +1078,30 @@ class GaiaRepository:
 
     def get_location(self, organization_id: str, location_id: str) -> JsonDict | None:
         return self._get_tenant_row("locations", organization_id, location_id, ["retention_policy"])
+
+    def list_locations(self, organization_id: str) -> list[JsonDict]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM locations
+            WHERE organization_id = ? AND deleted_at IS NULL
+            ORDER BY is_demo ASC, source_kind ASC, label ASC
+            """,
+            (organization_id,),
+        ).fetchall()
+        return [_decode_json_fields(dict(row), ["retention_policy"]) for row in rows]
+
+    def set_workspace_default_location(self, organization_id: str, workspace_id: str, location_id: str | None) -> None:
+        if location_id is not None:
+            self._require_location(organization_id, location_id)
+        self.connection.execute(
+            """
+            UPDATE workspaces
+            SET default_location_id = ?, updated_at = ?
+            WHERE organization_id = ? AND id = ? AND deleted_at IS NULL
+            """,
+            (location_id, now_iso(), organization_id, workspace_id),
+        )
+        self.connection.commit()
 
     def get_plant_entity(self, plant_entity_id: str) -> JsonDict | None:
         row = self.connection.execute(

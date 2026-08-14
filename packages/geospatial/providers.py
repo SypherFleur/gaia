@@ -219,3 +219,23 @@ class FixtureRegulatoryGeometryProvider:
             ],
         )
 
+
+class DisabledWatershedProvider:
+    provider_id = "watershed-disabled"
+
+    async def resolve_watershed(self, latitude: float, longitude: float, at_time: str | None = None) -> WatershedResolution:
+        return WatershedResolution(status=ProviderStatus("UNAVAILABLE", "watershed_provider_disabled"))
+
+
+class DisabledHardinessProvider:
+    provider_id = "hardiness-disabled"
+
+    async def resolve_zone(self, latitude: float, longitude: float, at_time: str | None = None) -> HardinessResolution:
+        return HardinessResolution(status=ProviderStatus("UNAVAILABLE", "hardiness_provider_disabled"))
+
+
+class DisabledRegulatoryGeometryProvider:
+    provider_id = "regulatory-geometry-disabled"
+
+    async def resolve_zones(self, latitude: float, longitude: float, at_time: str | None = None) -> RegulatoryZoneResolution:
+        return RegulatoryZoneResolution(status=ProviderStatus("UNAVAILABLE", "regulatory_geometry_provider_disabled"))

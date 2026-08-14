@@ -2,6 +2,7 @@ from .europe_pmc import EuropePMCAdapter, infer_study_type, normalize_europe_pmc
 from .fixture_adapters import FixtureResearchProvider
 from .fixture_model import FixtureScholarModelProvider
 from .providers import (
+    DisabledResearchProvider,
     ResearchCapabilities,
     ResearchDocument,
     ResearchFetchRequest,
@@ -15,6 +16,7 @@ from .tools import EuropePMCFetchTool, EuropePMCSearchTool
 from .validation import ResearchValidationError, sanitize_retrieved_text, validate_synthesis_draft
 
 __all__ = [
+    "DisabledResearchProvider",
     "EuropePMCAdapter",
     "EuropePMCFetchTool",
     "EuropePMCSearchTool",

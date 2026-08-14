@@ -48,3 +48,28 @@ class WaterProvider(Protocol):
 
     async def historical_conditions(self, latitude: float, longitude: float) -> EnvironmentalProviderResult: ...
 
+
+class DisabledWeatherProvider:
+    async def forecast(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["weather_provider_disabled"])
+
+
+class DisabledClimateProvider:
+    async def climate_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["climate_provider_disabled"])
+
+
+class DisabledSoilSurveyProvider:
+    async def soil_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["soil_provider_disabled"])
+
+
+class DisabledWaterProvider:
+    async def nearby_sites(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["water_provider_disabled"])
+
+    async def current_conditions(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["water_provider_disabled"])
+
+    async def historical_conditions(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["water_provider_disabled"])

@@ -72,3 +72,15 @@ class ResearchProvider(Protocol):
 
     async def fetch(self, request: ResearchFetchRequest) -> ResearchDocument: ...
 
+
+class DisabledResearchProvider:
+    provider_id = "europe-pmc"
+
+    async def capabilities(self) -> ResearchCapabilities:
+        return ResearchCapabilities(provider_id=self.provider_id, keyword_search=False, metadata=False, abstract=False, study_type=False, publication_date=False, author_metadata=False, doi=False, open_access_status=False)
+
+    async def search(self, request: ResearchSearchRequest) -> ResearchSearchResponse:
+        return ResearchSearchResponse(provider_id=self.provider_id, query=request.query, status="UNAVAILABLE", warnings=["research_provider_disabled"])
+
+    async def fetch(self, request: ResearchFetchRequest) -> ResearchDocument:
+        return ResearchDocument(work=ResearchWork(title=""), status="UNAVAILABLE", warnings=["research_provider_disabled"])

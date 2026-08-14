@@ -214,10 +214,16 @@ pre {
 }
 
 .topbar-controls {
-  min-width: min(540px, 48vw);
+  min-width: min(760px, 58vw);
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 1fr) auto auto;
   gap: 10px;
+}
+
+.location-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .view {
@@ -599,6 +605,7 @@ dd {
   }
 
   .topbar-controls,
+  .location-control,
   .composer-actions,
   .date-grid,
   .split-list,

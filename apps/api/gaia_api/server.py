@@ -21,13 +21,18 @@ from apps.api.gaia_api.runtime import (
     DEFAULT_SQLITE_URL,
     AlphaProviderModes,
     GaiaRuntime,
+    architecture_summary,
     cost_status,
     create_runtime,
+    locations_payload,
     persistence_summary,
     provider_health_rows,
     provider_mode_for_provider,
+    public_geography_for_location,
     runtime_status,
     seed_demo,
+    set_active_location,
+    source_reconciliation_report,
 )
 from apps.api.gaia_api.season_api import post_calendar_commit, post_calendar_preview, post_season_plan
 from apps.api.gaia_api.sentinel_api import get_active_regulations, get_regulation_zones, post_movement_check
@@ -55,6 +60,8 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
                 self._json(system_payload(self.runtime, self.host_name, self.port_number))
             elif path == "/api/v1/dev-identity":
                 self._json(dev_identity_payload(self.runtime))
+            elif path == "/api/v1/locations":
+                self._json(locations_payload(self.runtime))
             elif path == "/api/v1/cost/status":
                 self._json(cost_status(self.runtime))
             elif path in {"/api/v1/providers", "/api/v1/providers/list"}:
@@ -107,6 +114,8 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
             context = self.runtime.context(request_id=str(payload.get("request_id") or f"api-{path.rsplit('/', 1)[-1]}"))
             if path == "/api/v1/seed/demo":
                 self._json(seed_demo(self.runtime))
+            elif path == "/api/v1/locations/active":
+                self._json(_run(set_active_location(self.runtime, **_active_location_payload(payload))))
             elif path == "/api/v1/plants":
                 self._json(_run(post_plant(self.runtime.repository, self.runtime.botanist, context, **_plant_payload(payload))))
             elif path.startswith("/api/v1/plants/") and path.endswith("/observations"):
@@ -202,8 +211,9 @@ def serve(
     print(f"UI: http://{host}:{port}/")
     print(f"API: http://{host}:{port}/api/v1")
     print(f"Database: {'SQLite' if database_url.startswith('sqlite:///') else database_url}")
-    print(f"Model: {runtime.text_model if runtime.provider_modes.text_model == 'local' else 'fixture-guidance-local'}")
-    print(f"Vision: {runtime.vision_model if runtime.provider_modes.vision_model == 'local' else 'fixture-vision-local'}")
+    status = runtime_status(runtime, host=host, port=port)
+    print(f"Model: {status['text_model']}")
+    print(f"Vision: {status['vision_model']}")
     print("Spend policy: $0 automatic paid usage")
     try:
         httpd.serve_forever()
@@ -323,14 +333,32 @@ def _season_payload(runtime: GaiaRuntime, payload: dict) -> dict:
 
 
 def _market_payload(runtime: GaiaRuntime, payload: dict) -> dict:
-    geography = payload.get("geography") or {"country_code": "US", "state_code": "TX", "county_or_district": "Travis County", "county_fips": "48453"}
+    location_id = payload.get("location_id") or runtime.primary_location_id
+    geography = payload.get("geography") or public_geography_for_location(runtime, location_id)
     return {
         "commodity": str(payload.get("commodity") or "tomato"),
         "geography": geography,
-        "location_id": payload.get("location_id") or runtime.primary_location_id,
+        "location_id": location_id,
         "crop_or_taxon": payload.get("crop_or_taxon") or {},
         "market_region": payload.get("market_region"),
     }
+
+
+def _active_location_payload(payload: dict) -> dict:
+    return {
+        "location_id": payload.get("location_id"),
+        "label": payload.get("label"),
+        "latitude": _float_or_none(payload.get("latitude")),
+        "longitude": _float_or_none(payload.get("longitude")),
+        "accuracy_m": _float_or_none(payload.get("accuracy_m")),
+        "source_kind": str(payload.get("source_kind") or "manual"),
+    }
+
+
+def _float_or_none(value) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
 
 
 def system_payload(runtime: GaiaRuntime, host: str, port: int) -> dict:
@@ -338,6 +366,9 @@ def system_payload(runtime: GaiaRuntime, host: str, port: int) -> dict:
     payload["cost"] = cost_status(runtime)
     payload["providers"] = providers_payload(runtime)["providers"]
     payload["persistence"] = persistence_summary(runtime)
+    payload["locations"] = locations_payload(runtime)
+    payload["architecture"] = architecture_summary(runtime)["orchestration"]
+    payload["sources"] = source_reconciliation_report(runtime)["summary"]
     return payload
 
 
@@ -350,6 +381,7 @@ def dev_identity_payload(runtime: GaiaRuntime) -> dict:
         "primary_location_id": runtime.primary_location_id,
         "calendar_binding_id": runtime.calendar_binding_id,
         "location_aliases": runtime.location_aliases,
+        "active_location": runtime.repository.get_location(runtime.organization_id, runtime.primary_location_id) if runtime.primary_location_id else None,
     }
 
 
@@ -372,6 +404,9 @@ def providers_payload(runtime: GaiaRuntime) -> dict:
                 "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
                 "allow_overage": provider.cost_policy.allow_overage,
                 "authentication_requirement": provider.authentication_requirement.value,
+                "terms_url": provider.license_metadata.terms_url,
+                "license": provider.license_metadata.license,
+                "attribution_required": provider.license_metadata.attribution_required,
             }
         )
     return {"providers": providers}

@@ -38,6 +38,12 @@ class ProtocolThreeServerTest(unittest.TestCase):
 
             restarted = create_runtime(database, provider_modes=AlphaProviderModes(text_model="fixture", vision_model="fixture"))
             try:
+                demo_workspace = restarted.connection.execute(
+                    "SELECT id FROM workspaces WHERE organization_id = ? AND name = 'Demo Workspace' AND deleted_at IS NULL",
+                    (restarted.organization_id,),
+                ).fetchone()
+                self.assertIsNotNone(demo_workspace)
+                restarted.workspace_id = demo_workspace["id"]
                 summary = persistence_summary(restarted)
                 self.assertGreaterEqual(summary["plant_count"], 1)
                 self.assertGreaterEqual(summary["observation_count"], 1)
@@ -226,6 +232,7 @@ class ProtocolThreeServerTest(unittest.TestCase):
 
 def start_server(port: int, database: str) -> subprocess.Popen:
     env = os.environ.copy()
+    env["GAIA_RUNTIME_MODE"] = "demo"
     env["GAIA_TEXT_MODEL_MODE"] = "fixture"
     env["GAIA_VISION_MODEL_MODE"] = "fixture"
     process = subprocess.Popen(

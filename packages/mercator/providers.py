@@ -41,3 +41,21 @@ class EconomicDataProvider(Protocol):
 
     async def supply_chain(self, request: EconomicRequest) -> EconomicProviderResult: ...
 
+
+class DisabledEconomicProvider:
+    provider_id = "economic-disabled"
+
+    async def production(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["economic_provider_disabled"])
+
+    async def market_reports(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["economic_provider_disabled"])
+
+    async def prices(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["economic_provider_disabled"])
+
+    async def regional_context(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["economic_provider_disabled"])
+
+    async def supply_chain(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["economic_provider_disabled"])

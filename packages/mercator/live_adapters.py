@@ -5,11 +5,10 @@ import os
 import urllib.parse
 import urllib.request
 
-from packages.mercator.fixture_adapters import FixtureAMSProvider, FixtureNASSProvider
 from packages.mercator.providers import EconomicProviderResult, EconomicRequest
 
 
-class NASSQuickStatsProvider(FixtureNASSProvider):
+class NASSQuickStatsProvider:
     provider_id = "usda-nass"
 
     def __init__(self, *, api_key_env: str = "GAIA_NASS_API_KEY", timeout_seconds: float = 10.0) -> None:
@@ -35,8 +34,20 @@ class NASSQuickStatsProvider(FixtureNASSProvider):
             payload = json.loads(response.read().decode("utf-8"))
         return EconomicProviderResult(status="AVAILABLE", data={"raw_record_count": len(payload.get("data", []))}, warnings=["live_normalization_deferred_to_fixture_contracts"])
 
+    async def market_reports(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["nass_market_reports_not_supported"])
 
-class AMSMyMarketNewsProvider(FixtureAMSProvider):
+    async def prices(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["nass_prices_not_supported"])
+
+    async def regional_context(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["nass_live_regional_context_normalization_deferred"])
+
+    async def supply_chain(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["nass_supply_chain_not_supported"])
+
+
+class AMSMyMarketNewsProvider:
     provider_id = "usda-ams"
 
     def __init__(self, *, api_key_env: str = "GAIA_AMS_API_KEY", timeout_seconds: float = 10.0) -> None:
@@ -50,3 +61,14 @@ class AMSMyMarketNewsProvider(FixtureAMSProvider):
             return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_api_key_not_configured"])
         return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_live_endpoint_requires_explicit_report_selection"])
 
+    async def production(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_production_not_supported"])
+
+    async def prices(self, request: EconomicRequest) -> EconomicProviderResult:
+        return await self.market_reports(request)
+
+    async def regional_context(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_regional_context_not_supported"])
+
+    async def supply_chain(self, request: EconomicRequest) -> EconomicProviderResult:
+        return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_live_supply_chain_normalization_deferred"])

@@ -126,6 +126,12 @@ class ToolGateway:
                 self._usage(context, tool, tool.provider_id, "denied", request)
                 return ToolResult.denied(reason)
 
+            if not provider.enabled:
+                reason = "provider_disabled"
+                self._audit(context, tool, "denied", reason, provider.provider_id)
+                self._usage(context, tool, provider.provider_id, "denied", request)
+                return ToolResult.denied(reason)
+
             if self.health_monitor.status(provider.provider_id) == HealthStatus.UNAVAILABLE:
                 reason = "provider_unavailable"
                 self._audit(context, tool, "denied", reason, provider.provider_id)

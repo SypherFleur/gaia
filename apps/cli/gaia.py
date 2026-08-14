@@ -23,12 +23,16 @@ from apps.api.gaia_api.runtime import (
     DEFAULT_ALPHA_PORT,
     DEFAULT_SQLITE_URL,
     ROOT,
+    architecture_summary,
     cost_status,
     create_runtime,
     doctor_report,
     persistence_summary,
     provider_health_rows,
+    public_geography_for_location,
+    provider_mode_for_provider,
     seed_demo,
+    source_reconciliation_report,
 )
 from apps.api.gaia_api.season_api import post_season_plan
 from apps.api.gaia_api.sentinel_api import post_movement_check
@@ -75,6 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     dev.add_argument("--smoke-seconds", type=float, default=None, help="Test helper: stop cleanly after the server becomes reachable.")
     dev.set_defaults(handler=handle_dev)
 
+    architecture = subcommands.add_parser("architecture", help="Show active GAIA architecture and orchestration topology.")
+    architecture.set_defaults(handler=handle_architecture)
+
     seed = subcommands.add_parser("seed", help="Seed local alpha data.")
     seed_subcommands = seed.add_subparsers(dest="seed_command")
     seed_demo_cmd = seed_subcommands.add_parser("demo", help="Seed the Cherokee Purple Tomato manual alpha workspace.")
@@ -92,10 +99,15 @@ def build_parser() -> argparse.ArgumentParser:
     providers_health = providers_subcommands.add_parser("health", help="Show provider health states.")
     providers_health.set_defaults(handler=handle_providers_health)
 
+    sources = subcommands.add_parser("sources", help="Source and data-mode inspection.")
+    sources_subcommands = sources.add_subparsers(dest="sources_command")
+    sources_list = sources_subcommands.add_parser("list", help="List source families, modes, and smoke-tested status.")
+    sources_list.set_defaults(handler=handle_sources_list)
+
     chat = subcommands.add_parser("chat", help="Ask GAIA through the local orchestrator.")
     chat.add_argument("message")
     chat.add_argument("--plant-id")
-    chat.add_argument("--location", default="tx-austin")
+    chat.add_argument("--location")
     chat.set_defaults(handler=handle_chat)
 
     plant = subcommands.add_parser("plant", help="Plant workspace commands.")
@@ -106,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     plant_add.add_argument("--taxon", required=True)
     plant_add.add_argument("--nickname", required=True)
     plant_add.add_argument("--cultivar")
-    plant_add.add_argument("--location", default="tx-austin")
+    plant_add.add_argument("--location")
     plant_add.set_defaults(handler=handle_plant_add)
     plant_show = plant_subcommands.add_parser("show", help="Show a plant.")
     plant_show.add_argument("plant_id")
@@ -165,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     season_plan.add_argument("--goal", default="Create a local alpha season plan.")
     season_plan.add_argument("--start-date", default="2026-09-15")
     season_plan.add_argument("--end-date", default="2026-12-15")
-    season_plan.add_argument("--location", default="tx-austin")
+    season_plan.add_argument("--location")
     season_plan.set_defaults(handler=handle_season_plan)
     season_show = season_subcommands.add_parser("show", help="List Season Plans.")
     season_show.set_defaults(handler=handle_season_show)
@@ -174,11 +186,12 @@ def build_parser() -> argparse.ArgumentParser:
     mercator_subcommands = mercator.add_subparsers(dest="mercator_command")
     mercator_context = mercator_subcommands.add_parser("context", help="Build Mercator context.")
     mercator_context.add_argument("--commodity", default="tomato")
+    mercator_context.add_argument("--location")
     mercator_context.set_defaults(handler=handle_mercator_context)
 
     research = subcommands.add_parser("research", help="Institutional research commands.")
     research_subcommands = research.add_subparsers(dest="research_command")
-    research_run = research_subcommands.add_parser("run", help="Run a fixture-backed evidence synthesis.")
+    research_run = research_subcommands.add_parser("run", help="Run an evidence synthesis using the configured source mode.")
     research_run.add_argument("--question", default="What evidence should guide Cherokee Purple Tomato care?")
     research_run.set_defaults(handler=handle_research_run)
     research_export = research_subcommands.add_parser("export", help="Export local research summary.")
@@ -226,8 +239,8 @@ def handle_dev(args: argparse.Namespace) -> JsonDict:
                 "detail": readiness.get("detail"),
                 "exit_code": readiness.get("exit_code"),
                 "command": _copy_paste_command(args),
-                "ui_url": f"http://{args.host}:{args.port}/",
-            }
+            "ui_url": f"http://{args.host}:{args.port}/",
+        }
         print("GAIA Local Alpha")
         print(f"UI: http://{args.host}:{args.port}/")
         print(f"API: http://{args.host}:{args.port}/api/v1")
@@ -255,6 +268,14 @@ def handle_seed_demo(args: argparse.Namespace) -> JsonDict:
         runtime.close()
 
 
+def handle_architecture(args: argparse.Namespace) -> JsonDict:
+    runtime = create_runtime(args.database, sovereign=args.sovereign)
+    try:
+        return architecture_summary(runtime)
+    finally:
+        runtime.close()
+
+
 def handle_cost_status(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
@@ -266,16 +287,21 @@ def handle_cost_status(args: argparse.Namespace) -> JsonDict:
 def handle_providers_list(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
+        modes = runtime.provider_modes.to_dict()
         return {
             "providers": [
                 {
                     "provider_id": provider.provider_id,
                     "provider_type": provider.provider_type.value,
                     "billing_class": provider.billing_class.value,
+                    "mode": "disabled" if not provider.enabled else provider_mode_for_provider(provider.provider_id, modes),
                     "enabled": provider.enabled,
                     "remote": provider.remote,
                     "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
                     "allow_overage": provider.cost_policy.allow_overage,
+                    "authentication_requirement": provider.authentication_requirement.value,
+                    "terms_url": provider.license_metadata.terms_url,
+                    "license": provider.license_metadata.license,
                 }
                 for provider in runtime.registry.all()
             ]
@@ -288,6 +314,14 @@ def handle_providers_health(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
         return {"providers": provider_health_rows(runtime)}
+    finally:
+        runtime.close()
+
+
+def handle_sources_list(args: argparse.Namespace) -> JsonDict:
+    runtime = create_runtime(args.database, sovereign=args.sovereign)
+    try:
+        return source_reconciliation_report(runtime)
     finally:
         runtime.close()
 
@@ -468,13 +502,14 @@ def handle_season_show(args: argparse.Namespace) -> JsonDict:
 def handle_mercator_context(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
+        location_id = _location_id(runtime.location_aliases, args.location) or runtime.primary_location_id
         return _run(
             post_economics_context(
                 runtime.mercator,
                 runtime.context(request_id="cli-mercator"),
                 commodity=args.commodity,
-                geography={"country_code": "US", "state_code": "TX", "county_or_district": "Travis County", "county_fips": "48453"},
-                location_id=runtime.primary_location_id,
+                geography=public_geography_for_location(runtime, location_id),
+                location_id=location_id,
             )
         )
     finally:
@@ -558,13 +593,23 @@ def _copy_paste_command(args: argparse.Namespace) -> str:
 def _text_model_label() -> str:
     import os
 
-    return os.environ.get("GAIA_OLLAMA_MODEL", "llama3.1:latest") if os.environ.get("GAIA_TEXT_MODEL_MODE", "local").lower() == "local" else "fixture-guidance-local"
+    mode = os.environ.get("GAIA_TEXT_MODEL_MODE", "local").lower()
+    if mode == "local":
+        return os.environ.get("GAIA_OLLAMA_MODEL", "llama3.1:latest")
+    if mode in {"disabled", "off", "none"}:
+        return "disabled"
+    return "fixture-guidance-local"
 
 
 def _vision_model_label() -> str:
     import os
 
-    return os.environ.get("GAIA_LLAVA_MODEL", "llava:latest") if os.environ.get("GAIA_VISION_MODEL_MODE", "local").lower() == "local" else "fixture-vision-local"
+    mode = os.environ.get("GAIA_VISION_MODEL_MODE", "local").lower()
+    if mode == "local":
+        return os.environ.get("GAIA_LLAVA_MODEL", "llava:latest")
+    if mode in {"disabled", "off", "none"}:
+        return "disabled"
+    return "fixture-vision-local"
 
 
 def print_json(payload: JsonDict) -> None:

@@ -102,4 +102,8 @@ class ContextCompiler:
             admin1=raw_location["admin1"],
             admin2=raw_location["admin2"],
             county_fips=raw_location["county_fips"],
+            source_kind=raw_location.get("source_kind", "saved"),
+            source_label=raw_location.get("source_label"),
+            is_demo=bool(raw_location.get("is_demo", False)),
+            verified_at=raw_location.get("verified_at"),
         )

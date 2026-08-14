@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -112,3 +113,95 @@ class GenesysPGRAdapter:
             content_hash=content_hash(payload),
         )
         return GermplasmSearchResult(status="AVAILABLE" if accessions else "UNAVAILABLE", query=query, accessions=accessions, provenance=[provenance])
+
+
+class KewPOWOApiAdapter:
+    provider_id = "kew-powo"
+
+    def __init__(self, *, user_agent: str, base_url: str = "https://powo.science.kew.org/api/2", timeout_seconds: float = 10.0) -> None:
+        if not user_agent:
+            raise ValueError("Kew POWO adapter requires a User-Agent")
+        self.user_agent = user_agent
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+
+    async def resolve_taxon(self, query: str) -> TaxonomyResolution:
+        return await asyncio.to_thread(self._resolve_taxon_sync, query)
+
+    def _resolve_taxon_sync(self, query: str) -> TaxonomyResolution:
+        url = f"{self.base_url}/search?q={urllib.parse.quote(query)}&f=accepted_names"
+        request = urllib.request.Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return TaxonomyResolution(status="PROVIDER_ERROR", query=query, warnings=[f"kew_powo_http_{exc.code}", "kew_terms_and_traffic_limits_respected"])
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return TaxonomyResolution(status="PROVIDER_ERROR", query=query, warnings=[f"kew_powo_error:{exc.__class__.__name__}"])
+        return self.normalize_search_response(query, payload, url)
+
+    def normalize_search_response(self, query: str, payload: dict, url: str | None = None) -> TaxonomyResolution:
+        rows = payload.get("results") or payload.get("records") or payload.get("data") or []
+        first = rows[0] if rows else payload.get("taxon") or payload.get("result") or {}
+        if not first:
+            return TaxonomyResolution(
+                status="UNRESOLVED",
+                query=query,
+                provenance=[self._provenance(url or "https://powo.science.kew.org/", None, payload)],
+                warnings=["kew_powo_no_match"],
+            )
+        name = first.get("name") or first.get("scientificName") or first.get("acceptedName") or first.get("fullName")
+        fqid = first.get("fqId") or first.get("id") or first.get("taxonId")
+        family = _value(first.get("family"))
+        genus = _value(first.get("genus")) or _first_word(name)
+        rank = first.get("rank")
+        common_names = [item for item in (first.get("commonNames") or first.get("common_names") or []) if isinstance(item, str)]
+        provenance = self._provenance(url or "https://powo.science.kew.org/", str(fqid) if fqid else None, payload)
+        return TaxonomyResolution(
+            status="ACCEPTED",
+            query=query,
+            canonical_taxon_id=f"kew-powo:{fqid}" if fqid else None,
+            accepted_scientific_name=name,
+            matched_name=name,
+            match_type="SEARCH",
+            rank=rank,
+            kingdom="Plantae",
+            family=family,
+            genus=genus,
+            common_names=common_names,
+            external_source_ids={"kew_powo_fqid": str(fqid)} if fqid else {},
+            research_sources=[
+                {
+                    "provider": self.provider_id,
+                    "record_type": "taxonomy_and_global_plant_names",
+                    "terms_url": "https://www.kew.org/about-us/terms-and-conditions",
+                    "note": "Kew data requires attribution and does not imply Kew endorsement.",
+                }
+            ],
+            provenance=[provenance],
+            warnings=["kew_attribution_required", "kew_no_implied_endorsement"],
+        )
+
+    def _provenance(self, url: str, external_record_id: str | None, payload: dict) -> ProvenanceRecord:
+        return ProvenanceRecord(
+            provider=self.provider_id,
+            external_record_id=external_record_id,
+            canonical_url=url,
+            authority="Royal Botanic Gardens, Kew / Plants of the World Online",
+            geographic_scope="global taxonomy",
+            license="Kew terms and dataset-specific licenses; attribution required",
+            attribution="Royal Botanic Gardens, Kew",
+            content_hash=content_hash(payload),
+        )
+
+
+def _value(value):
+    if isinstance(value, dict):
+        return value.get("name") or value.get("scientificName")
+    return value
+
+
+def _first_word(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.split()[0]

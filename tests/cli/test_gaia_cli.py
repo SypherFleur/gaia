@@ -43,6 +43,23 @@ class GaiaCLITest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(payload["providers"])
         self.assertFalse(any(provider["enabled"] and provider["billing_class"] == "MANUAL_PAID" for provider in payload["providers"]))
+        self.assertTrue(all("mode" in provider for provider in payload["providers"]))
+
+    def test_architecture_command_reports_guidance_graph(self) -> None:
+        code, payload = invoke("architecture")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn(payload["orchestration"]["graph"]["engine"], {"langgraph", "langgraph-compatible-local"})
+        self.assertTrue(payload["orchestration"]["legacy_custom_orchestrator_preserved"])
+
+    def test_sources_list_reports_kew_and_cash_status(self) -> None:
+        code, payload = invoke("sources", "list")
+
+        self.assertEqual(code, 0)
+        rows = {row["provider_id"]: row for row in payload["rows"]}
+        self.assertEqual(rows["kew-powo"]["source_state"], "documented-only")
+        self.assertEqual(payload["cash_status"]["total_development_cash_spent"], 0.0)
 
     def test_eval_run_counts_smoke_prompts(self) -> None:
         code, payload = invoke("eval", "run")

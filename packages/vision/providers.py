@@ -57,3 +57,13 @@ class VisionProvider(Protocol):
     async def capabilities(self) -> VisionCapabilities: ...
 
     async def analyze(self, request: VisionRequest) -> VisionResponse: ...
+
+
+class DisabledVisionProvider:
+    provider_id = "ollama-llava-local"
+
+    async def capabilities(self) -> VisionCapabilities:
+        return VisionCapabilities(provider_id=self.provider_id, local_or_remote="local", cost_class="LOCAL")
+
+    async def analyze(self, request: VisionRequest) -> VisionResponse:
+        return VisionResponse(provider_id=self.provider_id, status="UNAVAILABLE", warnings=["vision_provider_disabled"])

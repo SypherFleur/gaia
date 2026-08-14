@@ -62,3 +62,17 @@ class GermplasmProvider(Protocol):
     provider_id: str
 
     async def search_accessions(self, query: str, *, limit: int = 10) -> GermplasmSearchResult: ...
+
+
+class DisabledTaxonomyProvider:
+    provider_id = "taxonomy-disabled"
+
+    async def resolve_taxon(self, query: str) -> TaxonomyResolution:
+        return TaxonomyResolution(status="PROVIDER_ERROR", query=query, warnings=["taxonomy_provider_disabled"])
+
+
+class DisabledGermplasmProvider:
+    provider_id = "germplasm-disabled"
+
+    async def search_accessions(self, query: str, *, limit: int = 10) -> GermplasmSearchResult:
+        return GermplasmSearchResult(status="UNAVAILABLE", query=query, warnings=["germplasm_provider_disabled"])

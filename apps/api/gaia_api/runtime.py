@@ -13,11 +13,16 @@ from typing import Literal
 from packages.audit import AuditLog, UsageLedger
 from packages.botany import (
     BotanistService,
+    DisabledGermplasmProvider,
+    DisabledTaxonomyProvider,
     FixtureGBIFProvider,
     FixtureGenesysProvider,
     GBIFApiAdapter,
     GBIFTaxonomyTool,
     GenesysGermplasmTool,
+    GenesysPGRAdapter,
+    KewPOWOApiAdapter,
+    KewPOWOTaxonomyTool,
 )
 from packages.cache import SQLiteCacheBackend
 from packages.calendar_gateway import CalendarCreateEventTool, CalendarWorkflowService, FixtureCalendarProvider
@@ -40,11 +45,15 @@ from packages.domain.models import new_id, now_iso
 from packages.environment import TerraService
 from packages.environment.fixture_adapters import FixtureNASAPowerProvider, FixtureNWSProvider, FixtureUSDASoilProvider, FixtureUSGSWaterProvider
 from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter
+from packages.environment.providers import DisabledClimateProvider, DisabledSoilSurveyProvider, DisabledWaterProvider, DisabledWeatherProvider
 from packages.environment.tools import NASAPowerClimateTool, NWSForecastTool, USDASoilSurveyTool, USGSWaterSitesTool
 from packages.geospatial import AtlasService
 from packages.geospatial.providers import (
     AdminResolution,
     AtlasZone,
+    DisabledHardinessProvider,
+    DisabledRegulatoryGeometryProvider,
+    DisabledWatershedProvider,
     FixtureHardinessProvider,
     FixtureWatershedProvider,
     ProviderStatus,
@@ -53,9 +62,12 @@ from packages.geospatial.providers import (
 from packages.mercator import (
     AMSMarketReportTool,
     AMSSupplyChainTool,
+    AMSMyMarketNewsProvider,
+    DisabledEconomicProvider,
     FixtureAMSProvider,
     FixtureNASSProvider,
     MercatorContextProvider,
+    NASSQuickStatsProvider,
     NASSProductionTool,
     NASSRegionalContextTool,
 )
@@ -77,7 +89,7 @@ from packages.providers import (
     QuotaManager,
 )
 from packages.provenance import ProvenanceRecord, content_hash
-from packages.research import EuropePMCFetchTool, EuropePMCSearchTool, FixtureResearchProvider, FixtureScholarModelProvider, ScholarService
+from packages.research import DisabledResearchProvider, EuropePMCFetchTool, EuropePMCSearchTool, FixtureResearchProvider, FixtureScholarModelProvider, ScholarService
 from packages.research.europe_pmc import EuropePMCAdapter
 from packages.season import DeterministicSeasonPlanner, SeasonContextProvider, SeasonService
 from packages.sentinel import (
@@ -96,11 +108,13 @@ from packages.sentinel import (
     RegulationMovementRulesTool,
     RegulationPestAlertsTool,
     SentinelService,
+    TEXAS_CITRUS_URL,
+    TEXAS_GREENING_URL,
     USStateJurisdictionPack,
 )
 from packages.status import CostStatusService
 from packages.tools import ToolExecutionContext, ToolGateway
-from packages.vision import FixtureVisionProvider, OllamaLlavaVisionProvider, VisionAnalysisTool, VisionService
+from packages.vision import DisabledVisionProvider, FixtureVisionProvider, OllamaLlavaVisionProvider, VisionAnalysisTool, VisionService
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -115,7 +129,10 @@ ProviderMode = Literal["fixture", "live", "disabled", "local"]
 class AlphaProviderModes:
     nws: ProviderMode = "fixture"
     nasa_power: ProviderMode = "fixture"
+    usda_soil: ProviderMode = "fixture"
+    usgs_water: ProviderMode = "fixture"
     gbif: ProviderMode = "fixture"
+    kew_powo: ProviderMode = "disabled"
     genesys_pgr: ProviderMode = "fixture"
     europe_pmc: ProviderMode = "fixture"
     aphis: ProviderMode = "fixture"
@@ -129,22 +146,26 @@ class AlphaProviderModes:
     vision_model: ProviderMode = "local"
 
     @classmethod
-    def from_environment(cls) -> "AlphaProviderModes":
+    def from_environment(cls, *, fixture_defaults: bool = False) -> "AlphaProviderModes":
+        defaults = _fixture_provider_defaults() if fixture_defaults else _normal_provider_defaults()
         return cls(
-            nws=_mode("GAIA_NWS_MODE", "fixture"),
-            nasa_power=_mode("GAIA_NASA_POWER_MODE", "fixture"),
-            gbif=_mode("GAIA_GBIF_MODE", "fixture"),
-            genesys_pgr=_mode("GAIA_GENESYS_MODE", "fixture"),
-            europe_pmc=_mode("GAIA_EUROPE_PMC_MODE", "fixture"),
-            aphis=_mode("GAIA_APHIS_MODE", "fixture"),
-            texas_agriculture=_mode("GAIA_TEXAS_AGRICULTURE_MODE", "fixture"),
-            florida_fdacs=_mode("GAIA_FLORIDA_FDACS_MODE", "fixture"),
-            usda_nass=_mode("GAIA_NASS_MODE", "fixture"),
-            usda_ams=_mode("GAIA_AMS_MODE", "fixture"),
-            plantnet=_mode("GAIA_PLANTNET_MODE", "disabled"),
-            google_calendar=_mode("GAIA_GOOGLE_CALENDAR_MODE", "disabled"),
-            text_model=_mode("GAIA_TEXT_MODEL_MODE", "local"),
-            vision_model=_mode("GAIA_VISION_MODEL_MODE", "local"),
+            nws=_mode("GAIA_NWS_MODE", defaults["nws"]),
+            nasa_power=_mode("GAIA_NASA_POWER_MODE", defaults["nasa_power"]),
+            usda_soil=_mode("GAIA_USDA_SOIL_MODE", defaults["usda_soil"]),
+            usgs_water=_mode("GAIA_USGS_WATER_MODE", defaults["usgs_water"]),
+            gbif=_mode("GAIA_GBIF_MODE", defaults["gbif"]),
+            kew_powo=_mode("GAIA_KEW_POWO_MODE", defaults["kew_powo"]),
+            genesys_pgr=_mode("GAIA_GENESYS_MODE", defaults["genesys_pgr"]),
+            europe_pmc=_mode("GAIA_EUROPE_PMC_MODE", defaults["europe_pmc"]),
+            aphis=_mode("GAIA_APHIS_MODE", defaults["aphis"]),
+            texas_agriculture=_mode("GAIA_TEXAS_AGRICULTURE_MODE", defaults["texas_agriculture"]),
+            florida_fdacs=_mode("GAIA_FLORIDA_FDACS_MODE", defaults["florida_fdacs"]),
+            usda_nass=_mode("GAIA_NASS_MODE", defaults["usda_nass"]),
+            usda_ams=_mode("GAIA_AMS_MODE", defaults["usda_ams"]),
+            plantnet=_mode("GAIA_PLANTNET_MODE", defaults["plantnet"]),
+            google_calendar=_mode("GAIA_GOOGLE_CALENDAR_MODE", defaults["google_calendar"]),
+            text_model=_mode("GAIA_TEXT_MODEL_MODE", defaults["text_model"]),
+            vision_model=_mode("GAIA_VISION_MODEL_MODE", defaults["vision_model"]),
         )
 
     def to_dict(self) -> dict[str, str]:
@@ -176,7 +197,7 @@ class GaiaRuntime:
     organization_id: str
     user_id: str
     workspace_id: str
-    primary_location_id: str
+    primary_location_id: str | None
     calendar_binding_id: str
     location_aliases: dict[str, str]
     provider_modes: AlphaProviderModes
@@ -208,11 +229,12 @@ def create_runtime(
     provider_modes: AlphaProviderModes | None = None,
 ) -> GaiaRuntime:
     database = database_url or DEFAULT_SQLITE_URL
-    modes = provider_modes or AlphaProviderModes.from_environment()
+    fixture_defaults = _fixture_defaults_for_runtime(database)
+    modes = provider_modes or AlphaProviderModes.from_environment(fixture_defaults=fixture_defaults)
     connection = connect_sqlite_url(database)
     initialize_schema_if_empty(connection)
     repository = GaiaRepository(connection)
-    identity = ensure_development_identity(repository, sovereign=sovereign)
+    identity = ensure_development_identity(repository, sovereign=sovereign, fixture_defaults=fixture_defaults)
 
     registry = build_provider_registry(modes)
     usage_ledger = UsageLedger(connection)
@@ -228,14 +250,20 @@ def create_runtime(
         audit_log=audit_log,
     )
 
-    atlas = AtlasService(repository, CLIGeographyProvider(), FixtureWatershedProvider(), FixtureHardinessProvider(), CLIRegulatoryGeometryProvider())
+    atlas = AtlasService(
+        repository,
+        CLIGeographyProvider(fixture=fixture_defaults),
+        FixtureWatershedProvider() if fixture_defaults else DisabledWatershedProvider(),
+        FixtureHardinessProvider() if fixture_defaults else DisabledHardinessProvider(),
+        CLIRegulatoryGeometryProvider(fixture=fixture_defaults) if fixture_defaults else DisabledRegulatoryGeometryProvider(),
+    )
     terra = TerraService(
         repository,
         tool_gateway,
         NWSForecastTool(_nws_provider(modes)),
         NASAPowerClimateTool(_nasa_power_provider(modes)),
-        USDASoilSurveyTool(FixtureUSDASoilProvider()),
-        USGSWaterSitesTool(FixtureUSGSWaterProvider()),
+        USDASoilSurveyTool(_soil_provider(modes)),
+        USGSWaterSitesTool(_water_provider(modes)),
     )
     context_compiler = ContextCompiler(repository, atlas, terra)
 
@@ -252,12 +280,13 @@ def create_runtime(
         repository,
         tool_gateway,
         GBIFTaxonomyTool(_gbif_provider(modes)),
-        GenesysGermplasmTool(FixtureGenesysProvider()),
+        GenesysGermplasmTool(_genesys_provider(modes)),
+        taxonomy_supplement_tools=[KewPOWOTaxonomyTool(_kew_provider(modes))],
     )
     vision_tool = VisionAnalysisTool(_vision_provider(modes), provider_id=_vision_provider_id(modes))
     vision = VisionService(repository=repository, tool_gateway=tool_gateway, context_compiler=context_compiler, botanist=botanist)
 
-    research_provider = EuropePMCAdapter() if modes.europe_pmc == "live" else FixtureResearchProvider()
+    research_provider = _research_provider(modes)
     scholar_model_gateway = model_gateway if modes.text_model == "local" else ModelGateway(
         connection=connection,
         registry=registry,
@@ -276,9 +305,9 @@ def create_runtime(
         context_compiler=context_compiler,
     )
 
-    aphis = FixtureAPHISProvider()
-    texas = FixtureTexasAgricultureProvider()
-    florida = FixtureFloridaFDACSProvider()
+    aphis = _aphis_provider(modes)
+    texas = _texas_regulatory_provider(modes)
+    florida = _florida_regulatory_provider(modes)
     live_regulatory_probes = _live_regulatory_probes(modes)
     pack_registry = JurisdictionPackRegistry(
         [
@@ -304,10 +333,10 @@ def create_runtime(
     mercator = MercatorContextProvider(
         repository=repository,
         tool_gateway=tool_gateway,
-        nass_production_tool=NASSProductionTool(FixtureNASSProvider()),
-        nass_region_tool=NASSRegionalContextTool(FixtureNASSProvider()),
-        ams_market_tool=AMSMarketReportTool(FixtureAMSProvider()),
-        ams_supply_chain_tool=AMSSupplyChainTool(FixtureAMSProvider()),
+        nass_production_tool=NASSProductionTool(_nass_provider(modes)),
+        nass_region_tool=NASSRegionalContextTool(_nass_provider(modes)),
+        ams_market_tool=AMSMarketReportTool(_ams_provider(modes)),
+        ams_supply_chain_tool=AMSSupplyChainTool(_ams_provider(modes)),
     )
     season_context_provider = SeasonContextProvider(repository=repository, context_compiler=context_compiler, mercator_context_provider=mercator)
     season = SeasonService(repository=repository, planner=DeterministicSeasonPlanner(), model_gateway=model_gateway)
@@ -363,7 +392,7 @@ def create_runtime(
     )
 
 
-def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool = False) -> dict:
+def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool = False, fixture_defaults: bool = False) -> dict:
     organization = _find_one(repository.connection, "organizations", "slug", "gaia-local-alpha")
     if organization is None:
         try:
@@ -413,13 +442,14 @@ def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool =
     else:
         workspace_id = workspace["id"]
 
-    aliases = seed_cli_locations(repository, organization_id)
-    primary_location_id = aliases["tx-austin"]
-    repository.connection.execute(
-        "UPDATE workspaces SET default_location_id = ?, updated_at = ? WHERE id = ?",
-        (primary_location_id, now_iso(), workspace_id),
-    )
-    repository.connection.commit()
+    if fixture_defaults:
+        aliases = seed_cli_locations(repository, organization_id)
+        primary_location_id = aliases["tx-austin"]
+        repository.set_workspace_default_location(organization_id, workspace_id, primary_location_id)
+    else:
+        aliases = existing_cli_location_aliases(repository, organization_id)
+        primary_location_id = _active_real_location_id(repository, organization_id, workspace_id)
+        repository.set_workspace_default_location(organization_id, workspace_id, primary_location_id)
 
     calendar_binding = _calendar_binding(repository.connection, organization_id, user_id)
     if calendar_binding is None:
@@ -457,19 +487,72 @@ def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool =
 
 def seed_cli_locations(repository: GaiaRepository, organization_id: str) -> dict[str, str]:
     records = {
-        "tx-austin": Location(organization_id=organization_id, label="Austin garden", latitude=30.2672, longitude=-97.7431, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Travis County", county_fips="48453"),
-        "tx-houston": Location(organization_id=organization_id, label="Houston, TX", latitude=29.7604, longitude=-95.3698, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Harris County", county_fips="48201"),
-        "tx-hidalgo": Location(organization_id=organization_id, label="Hidalgo County, TX", latitude=26.1, longitude=-98.2, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Hidalgo County", county_fips="48215"),
-        "fl-orlando": Location(organization_id=organization_id, label="Orlando, FL", latitude=28.5383, longitude=-81.3792, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="FL", admin2="Orange County", county_fips="12095"),
-        "fl-broward": Location(organization_id=organization_id, label="Broward County, FL", latitude=26.1901, longitude=-80.3659, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="FL", admin2="Broward County", county_fips="12011"),
-        "ga-atlanta": Location(organization_id=organization_id, label="Atlanta, GA", latitude=33.7490, longitude=-84.3880, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="GA", admin2="Fulton County", county_fips="13121"),
-        "ca-los-angeles": Location(organization_id=organization_id, label="Los Angeles, CA", latitude=34.0522, longitude=-118.2437, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Los_Angeles", country_code="US", admin1="CA", admin2="Los Angeles County", county_fips="06037"),
+        "tx-austin": Location(organization_id=organization_id, label="Austin garden", latitude=30.2672, longitude=-97.7431, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Travis County", county_fips="48453", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "tx-houston": Location(organization_id=organization_id, label="Houston, TX", latitude=29.7604, longitude=-95.3698, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Harris County", county_fips="48201", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "tx-hidalgo": Location(organization_id=organization_id, label="Hidalgo County, TX", latitude=26.1, longitude=-98.2, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Chicago", country_code="US", admin1="TX", admin2="Hidalgo County", county_fips="48215", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "fl-orlando": Location(organization_id=organization_id, label="Orlando, FL", latitude=28.5383, longitude=-81.3792, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="FL", admin2="Orange County", county_fips="12095", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "fl-broward": Location(organization_id=organization_id, label="Broward County, FL", latitude=26.1901, longitude=-80.3659, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="FL", admin2="Broward County", county_fips="12011", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "ga-atlanta": Location(organization_id=organization_id, label="Atlanta, GA", latitude=33.7490, longitude=-84.3880, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/New_York", country_code="US", admin1="GA", admin2="Fulton County", county_fips="13121", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
+        "ca-los-angeles": Location(organization_id=organization_id, label="Los Angeles, CA", latitude=34.0522, longitude=-118.2437, privacy_precision="1km", exact_coordinates_authorized=True, timezone="America/Los_Angeles", country_code="US", admin1="CA", admin2="Los Angeles County", county_fips="06037", source_kind="demo_fixture", source_label="GAIA CLI demo alias", is_demo=True),
     }
     aliases = {}
     for alias, location in records.items():
         existing = _location(repository.connection, organization_id, location.label)
-        aliases[alias] = existing["id"] if existing else repository.create_location(location).id
+        if existing:
+            aliases[alias] = existing["id"]
+            repository.connection.execute(
+                """
+                UPDATE locations
+                SET source_kind = ?, source_label = ?, is_demo = ?, updated_at = ?
+                WHERE id = ? AND organization_id = ?
+                """,
+                ("demo_fixture", "GAIA CLI demo alias", 1, now_iso(), existing["id"], organization_id),
+            )
+            repository.connection.commit()
+        else:
+            aliases[alias] = repository.create_location(location).id
     return aliases
+
+
+def existing_cli_location_aliases(repository: GaiaRepository, organization_id: str) -> dict[str, str]:
+    aliases = {}
+    for alias, label in _demo_location_labels().items():
+        existing = _location(repository.connection, organization_id, label)
+        if existing:
+            aliases[alias] = existing["id"]
+    return aliases
+
+
+def _demo_location_labels() -> dict[str, str]:
+    return {
+        "tx-austin": "Austin garden",
+        "tx-houston": "Houston, TX",
+        "tx-hidalgo": "Hidalgo County, TX",
+        "fl-orlando": "Orlando, FL",
+        "fl-broward": "Broward County, FL",
+        "ga-atlanta": "Atlanta, GA",
+        "ca-los-angeles": "Los Angeles, CA",
+    }
+
+
+def _active_real_location_id(repository: GaiaRepository, organization_id: str, workspace_id: str) -> str | None:
+    workspace = repository.get_workspace(organization_id, workspace_id)
+    candidate_id = workspace.get("default_location_id") if workspace else None
+    if candidate_id:
+        location = repository.get_location(organization_id, candidate_id)
+        if location and not bool(location.get("is_demo")) and location.get("source_kind") in {"device", "manual", "saved"}:
+            return candidate_id
+    rows = repository.connection.execute(
+        """
+        SELECT id FROM locations
+        WHERE organization_id = ? AND deleted_at IS NULL
+          AND is_demo = 0 AND source_kind IN ('device', 'manual', 'saved')
+        ORDER BY source_kind = 'device' DESC, verified_at DESC, updated_at DESC
+        LIMIT 1
+        """,
+        (organization_id,),
+    ).fetchone()
+    return rows["id"] if rows else None
 
 
 def seed_demo(runtime: GaiaRuntime) -> dict:
@@ -478,6 +561,14 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
 
     import asyncio
 
+    context = runtime.context(request_id="seed-demo")
+    if "tx-austin" not in runtime.location_aliases:
+        runtime.location_aliases.update(seed_cli_locations(runtime.repository, runtime.organization_id))
+    demo_workspace_id = ensure_demo_workspace(runtime.repository, runtime.organization_id)
+    runtime.workspace_id = demo_workspace_id
+    demo_location_id = runtime.location_aliases["tx-austin"]
+    runtime.primary_location_id = demo_location_id
+    runtime.repository.set_workspace_default_location(runtime.organization_id, demo_workspace_id, demo_location_id)
     context = runtime.context(request_id="seed-demo")
     existing_plants = runtime.repository.list_user_plants(runtime.organization_id, runtime.workspace_id)
     tomato = next((plant for plant in existing_plants if plant["nickname"] == "Cherokee Purple Tomato"), None)
@@ -491,7 +582,7 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
                 nickname="Cherokee Purple Tomato",
                 cultivar="Cherokee Purple",
                 lifecycle_stage="vegetative",
-                location_id=runtime.primary_location_id,
+                location_id=demo_location_id,
                 growing_method="raised bed",
                 tags=["demo", "tomato"],
             )
@@ -528,7 +619,7 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
                 runtime.season_context_provider,
                 context,
                 workspace_id=runtime.workspace_id,
-                location_id=runtime.primary_location_id,
+                location_id=demo_location_id,
                 objective="Create a fall care plan for Cherokee Purple Tomato.",
                 crop_names=["tomato"],
                 start_date="2026-09-15",
@@ -553,6 +644,21 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
     return persistence_summary(runtime)
 
 
+def ensure_demo_workspace(repository: GaiaRepository, organization_id: str) -> str:
+    workspace = _workspace(repository.connection, organization_id, "Demo Workspace")
+    if workspace is not None:
+        return workspace["id"]
+    created = repository.create_workspace(
+        Workspace(
+            organization_id=organization_id,
+            name="Demo Workspace",
+            purpose="explicit demo fixtures",
+            knowledge_policy={"fixture_isolation": True, "demo_only": True},
+        )
+    )
+    return created.id
+
+
 def persistence_summary(runtime: GaiaRuntime) -> dict:
     plants = runtime.repository.list_user_plants(runtime.organization_id, runtime.workspace_id)
     observations = []
@@ -571,6 +677,205 @@ def persistence_summary(runtime: GaiaRuntime) -> dict:
     }
 
 
+async def set_active_location(
+    runtime: GaiaRuntime,
+    *,
+    location_id: str | None = None,
+    label: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    accuracy_m: float | None = None,
+    source_kind: str = "manual",
+) -> dict:
+    if location_id:
+        location = runtime.repository.get_location(runtime.organization_id, location_id)
+        if location is None:
+            raise PermissionError("Location is missing or inaccessible")
+    else:
+        if latitude is None or longitude is None:
+            raise ValueError("latitude_and_longitude_required")
+        if source_kind not in {"device", "manual", "saved"}:
+            raise ValueError("active_location_must_be_device_manual_or_saved")
+        admin = await CLIGeographyProvider(fixture=False).resolve_admin(latitude, longitude)
+        location_obj = Location(
+            organization_id=runtime.organization_id,
+            label=label or ("Device location" if source_kind == "device" else "Manual location"),
+            latitude=latitude,
+            longitude=longitude,
+            accuracy_m=accuracy_m,
+            privacy_precision="1km",
+            exact_coordinates_authorized=source_kind == "device",
+            timezone=admin.timezone or "UTC",
+            country_code=admin.country_code or "US",
+            admin1=admin.state_code,
+            admin2=admin.county_or_district,
+            county_fips=admin.county_fips,
+            source_kind=source_kind,
+            source_label="browser geolocation permission" if source_kind == "device" else "user-entered location",
+            is_demo=False,
+            verified_at=now_iso(),
+        )
+        location = asdict(runtime.repository.create_location(location_obj))
+    runtime.repository.set_workspace_default_location(runtime.organization_id, runtime.workspace_id, location["id"])
+    runtime.primary_location_id = location["id"]
+    return {"status": "ok", "active_location": runtime.repository.get_location(runtime.organization_id, location["id"])}
+
+
+def locations_payload(runtime: GaiaRuntime) -> dict:
+    active = runtime.repository.get_location(runtime.organization_id, runtime.primary_location_id) if runtime.primary_location_id else None
+    return {
+        "active_location_id": runtime.primary_location_id,
+        "active_location": active,
+        "locations": runtime.repository.list_locations(runtime.organization_id),
+        "location_aliases": runtime.location_aliases,
+        "semantics": {
+            "device": "Browser geolocation granted by the user for this local alpha session.",
+            "manual": "Coordinates or place entered by the user.",
+            "saved": "A real saved location selected by the user.",
+            "demo_fixture": "Explicit demo/test location; never current device location.",
+        },
+    }
+
+
+def public_geography_for_location(runtime: GaiaRuntime, location_id: str | None) -> dict:
+    if not location_id:
+        return {}
+    location = runtime.repository.get_location(runtime.organization_id, location_id)
+    if not location:
+        return {}
+    return {
+        key: value
+        for key, value in {
+            "country_code": location.get("country_code"),
+            "state_code": location.get("admin1"),
+            "county_or_district": location.get("admin2"),
+            "county_fips": location.get("county_fips"),
+        }.items()
+        if value is not None
+    }
+
+
+def architecture_summary(runtime: GaiaRuntime) -> dict:
+    return {
+        "status": "ok",
+        "orchestration": {
+            "active_layer": "LangGraph GuidancePlan workflow" if runtime.orchestrator.graph_summary()["engine"] == "langgraph" else "LangGraph-compatible GuidancePlan workflow",
+            "legacy_custom_orchestrator_preserved": True,
+            "graph": runtime.orchestrator.graph_summary(),
+            "routing": "deterministic route classification before model selection",
+        },
+        "guardrails": {
+            "tool_calls": ["Tool Gateway", "Cost Firewall", "quota/cache", "provenance", "tenant/workspace checks", "egress policy", "audit/usage ledger"],
+            "model_calls": ["Model Gateway", "Cost Firewall", "local/allowed providers only", "GuidancePlan validation", "audit/usage ledger"],
+            "calendar_writes": "preview/commit approval gate preserved",
+            "paid_paths": "disabled; no automatic paid provider, model, overage, telemetry, or storage path enabled",
+        },
+        "specialists": ["Atlas", "Terra", "Botanist", "Vision", "Scholar", "Sentinel", "Season", "Mercator"],
+        "provider_modes": runtime.provider_modes.to_dict(),
+        "location": locations_payload(runtime),
+        "cash": cost_status(runtime),
+    }
+
+
+def source_inventory_rows(runtime: GaiaRuntime) -> list[dict]:
+    modes = runtime.provider_modes.to_dict()
+    stored_counts = _source_record_counts(runtime)
+    rows = []
+    for provider in runtime.registry.all():
+        mode = provider_mode_for_provider(provider.provider_id, modes)
+        if not provider.enabled:
+            mode = "disabled"
+        source_state = _source_state(provider.provider_id, mode)
+        rows.append(
+            {
+                "provider_id": provider.provider_id,
+                "display_name": provider.display_name,
+                "source_type": provider.provider_type.value,
+                "mode": mode,
+                "source_state": source_state,
+                "remote": provider.remote,
+                "billing_class": provider.billing_class.value,
+                "authentication": provider.authentication_requirement.value,
+                "stored_source_records": stored_counts.get(provider.provider_id, 0),
+                "terms_url": provider.license_metadata.terms_url,
+                "license": provider.license_metadata.license,
+                "attribution_required": provider.license_metadata.attribution_required,
+                "smoke_tested": _source_smoke_tested(provider.provider_id, mode),
+                "cash_status": "$0 automatic spend",
+            }
+        )
+    rows.extend(_atlas_source_rows(runtime, stored_counts))
+    return rows
+
+
+def source_reconciliation_report(runtime: GaiaRuntime) -> dict:
+    rows = source_inventory_rows(runtime)
+    by_state: dict[str, int] = {}
+    for row in rows:
+        by_state[row["source_state"]] = by_state.get(row["source_state"], 0) + 1
+    return {
+        "status": "ok",
+        "generated_at": now_iso(),
+        "summary": by_state,
+        "architecture": architecture_summary(runtime)["orchestration"],
+        "rows": rows,
+        "normal_runtime_rule": "live/free or fresh cache where supported; disabled/unavailable otherwise; fixtures only in tests or explicit demo mode",
+        "cash_status": cost_status(runtime),
+    }
+
+
+def _source_record_counts(runtime: GaiaRuntime) -> dict[str, int]:
+    rows = runtime.connection.execute(
+        """
+        SELECT provider, COUNT(*) AS count
+        FROM source_records
+        WHERE organization_id = ? AND deleted_at IS NULL
+        GROUP BY provider
+        """,
+        (runtime.organization_id,),
+    ).fetchall()
+    return {row["provider"]: int(row["count"]) for row in rows}
+
+
+def _source_state(provider_id: str, mode: str) -> str:
+    if provider_id == "kew-powo" and mode == "disabled":
+        return "documented-only"
+    if mode == "live":
+        return "live"
+    if mode == "fixture":
+        return "fixture"
+    if mode == "local":
+        return "local"
+    return "disabled"
+
+
+def _source_smoke_tested(provider_id: str, mode: str) -> bool:
+    if mode == "fixture":
+        return True
+    return provider_id in {"nws", "nasa-power", "gbif", "europe-pmc", "aphis", "florida-fdacs"} and mode == "live"
+
+
+def _atlas_source_rows(runtime: GaiaRuntime, stored_counts: dict[str, int]) -> list[dict]:
+    return [
+        {
+            "provider_id": "gaia-local-admin-geography",
+            "display_name": "GAIA local admin geography",
+            "source_type": "GEOSPATIAL",
+            "mode": "local",
+            "source_state": "local",
+            "remote": False,
+            "billing_class": "LOCAL",
+            "authentication": "LOCAL_ONLY",
+            "stored_source_records": stored_counts.get("gaia-local-admin-geography", 0),
+            "terms_url": None,
+            "license": "local-deterministic",
+            "attribution_required": False,
+            "smoke_tested": True,
+            "cash_status": "$0 automatic spend",
+        }
+    ]
+
+
 def cost_status(runtime: GaiaRuntime) -> dict:
     status = CostStatusService(runtime.registry, runtime.usage_ledger, FinancialPolicy()).status()
     status["automatic_paid_usage_enabled"] = False
@@ -587,8 +892,8 @@ def runtime_status(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port
         "api_url": f"http://{host}:{port}/api/v1",
         "database": "SQLite" if runtime.database_url.startswith("sqlite:///") else runtime.database_url,
         "database_url": runtime.database_url,
-        "text_model": runtime.text_model if runtime.provider_modes.text_model == "local" else "fixture-guidance-local",
-        "vision_model": runtime.vision_model if runtime.provider_modes.vision_model == "local" else "fixture-vision-local",
+        "text_model": _runtime_text_model_label(runtime),
+        "vision_model": _runtime_vision_model_label(runtime),
         "provider_modes": runtime.provider_modes.to_dict(),
         "spend_policy": "$0 automatic paid usage",
         "cash_spent": 0.0,
@@ -605,9 +910,28 @@ def runtime_status(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port
     }
 
 
+def _runtime_text_model_label(runtime: GaiaRuntime) -> str:
+    if runtime.provider_modes.text_model == "local":
+        return runtime.text_model
+    if runtime.provider_modes.text_model == "disabled":
+        return "disabled"
+    return "fixture-guidance-local"
+
+
+def _runtime_vision_model_label(runtime: GaiaRuntime) -> str:
+    if runtime.provider_modes.vision_model == "local":
+        return runtime.vision_model
+    if runtime.provider_modes.vision_model == "disabled":
+        return "disabled"
+    return "fixture-vision-local"
+
+
 def provider_mode_for_provider(provider_id: str, modes: dict[str, str]) -> str:
     mapping = {
         "nasa-power": "nasa_power",
+        "usda-nrcs-sda": "usda_soil",
+        "usgs-water": "usgs_water",
+        "kew-powo": "kew_powo",
         "genesys-pgr": "genesys_pgr",
         "europe-pmc": "europe_pmc",
         "texas-agriculture": "texas_agriculture",
@@ -640,7 +964,7 @@ def provider_health_rows(runtime: GaiaRuntime) -> list[dict]:
         }
         if provider.provider_id in runtime.live_regulatory_probes:
             row["live_probe"] = "read_only_official_pages"
-            row["decision_source"] = "fixture_jurisdiction_pack"
+            row["decision_source"] = "live_provenance_only_rules_unresolved"
         rows.append(row)
     return rows
 
@@ -704,6 +1028,21 @@ def initialize_schema_if_empty(connection: sqlite3.Connection) -> None:
     ).fetchone()
     if row is None:
         initialize_schema(connection)
+    ensure_runtime_schema(connection)
+
+
+def ensure_runtime_schema(connection: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(locations)").fetchall()}
+    additions = {
+        "source_kind": "ALTER TABLE locations ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'saved'",
+        "source_label": "ALTER TABLE locations ADD COLUMN source_label TEXT",
+        "is_demo": "ALTER TABLE locations ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+        "verified_at": "ALTER TABLE locations ADD COLUMN verified_at TEXT",
+    }
+    for column, statement in additions.items():
+        if column not in columns:
+            connection.execute(statement)
+    connection.commit()
 
 
 def build_provider_registry(modes: AlphaProviderModes) -> ProviderRegistry:
@@ -711,9 +1050,28 @@ def build_provider_registry(modes: AlphaProviderModes) -> ProviderRegistry:
         [
             _provider("nws", "National Weather Service", ProviderType.WEATHER, "NOAA/NWS", modes.nws, FreshnessClass.SHORT, "US"),
             _provider("nasa-power", "NASA POWER", ProviderType.CLIMATE, "NASA", modes.nasa_power, FreshnessClass.MEDIUM),
-            _provider("usda-nrcs-sda", "USDA NRCS Soil Data Access", ProviderType.SOIL, "USDA NRCS", "fixture", FreshnessClass.LONG, "US"),
-            _provider("usgs-water", "USGS Water", ProviderType.WATER, "USGS", "fixture", FreshnessClass.REALTIME, "US"),
+            _provider("usda-nrcs-sda", "USDA NRCS Soil Data Access", ProviderType.SOIL, "USDA NRCS", modes.usda_soil, FreshnessClass.LONG, "US"),
+            _provider("usgs-water", "USGS Water", ProviderType.WATER, "USGS", modes.usgs_water, FreshnessClass.REALTIME, "US"),
             _provider("gbif", "GBIF", ProviderType.TAXONOMY, "GBIF", modes.gbif, FreshnessClass.LONG),
+            _provider(
+                "kew-powo",
+                "Kew POWO / WCVP",
+                ProviderType.TAXONOMY,
+                "Royal Botanic Gardens, Kew",
+                modes.kew_powo,
+                FreshnessClass.LONG,
+                license_metadata=LicenseMetadata(
+                    terms_url="https://www.kew.org/about-us/terms-and-conditions",
+                    license="Kew terms and dataset-specific rights",
+                    commercial_use="review terms before product use",
+                    redistribution="dataset-specific",
+                    caching="respect terms, attribution, and traffic limits",
+                    derivative_use="allowed only within terms and source licenses",
+                    model_training="not enabled by GAIA",
+                    attribution_required=True,
+                    review_notes="POWO/WCVP source family is first-class but disabled by default until access path is explicitly approved.",
+                ),
+            ),
             _provider("genesys-pgr", "Genesys PGR", ProviderType.GERMPLASM, "Genesys PGR", modes.genesys_pgr, FreshnessClass.LONG, authentication=AuthenticationRequirement.OAUTH),
             _provider("europe-pmc", "Europe PMC", ProviderType.RESEARCH, "Europe PMC", modes.europe_pmc, FreshnessClass.MEDIUM),
             _provider("aphis", "APHIS", ProviderType.REGULATION, "USDA APHIS", modes.aphis, FreshnessClass.REGULATORY_CURRENT, "US"),
@@ -726,7 +1084,7 @@ def build_provider_registry(modes: AlphaProviderModes) -> ProviderRegistry:
             _provider("plantnet", "Pl@ntNet", ProviderType.VISION, "Pl@ntNet", modes.plantnet, FreshnessClass.SHORT, authentication=AuthenticationRequirement.REQUIRED_API_KEY),
             _provider("ollama-local", "Local Ollama", ProviderType.MODEL, "local", modes.text_model, FreshnessClass.STATIC, remote=False, authentication=AuthenticationRequirement.LOCAL_ONLY),
             _provider("ollama-llava-local", "Local Ollama LLaVA", ProviderType.VISION, "local", modes.vision_model, FreshnessClass.STATIC, remote=False, authentication=AuthenticationRequirement.LOCAL_ONLY),
-            _provider("fixture-vision-local", "Fixture Vision", ProviderType.VISION, "local", "fixture", FreshnessClass.STATIC, remote=False, authentication=AuthenticationRequirement.LOCAL_ONLY),
+            _provider("fixture-vision-local", "Fixture Vision", ProviderType.VISION, "local", "fixture" if modes.vision_model == "fixture" else "disabled", FreshnessClass.STATIC, remote=False, authentication=AuthenticationRequirement.LOCAL_ONLY),
             _manual_paid_provider(),
         ]
     )
@@ -743,6 +1101,7 @@ def _provider(
     *,
     remote: bool = True,
     authentication: AuthenticationRequirement = AuthenticationRequirement.NONE,
+    license_metadata: LicenseMetadata | None = None,
 ) -> ProviderRecord:
     enabled = mode != "disabled"
     billing = BillingClass.LOCAL if not remote else BillingClass.FREE
@@ -758,7 +1117,7 @@ def _provider(
         authentication_requirement=authentication,
         geographic_scope=geographic_scope,
         cache_policy=CachePolicy(freshness_class=freshness_class, ttl_seconds=3600, stale_if_error_seconds=86400),
-        license_metadata=LicenseMetadata(),
+        license_metadata=license_metadata or LicenseMetadata(),
         attribution=authority,
         health_status=HealthStatus.UNKNOWN if enabled else HealthStatus.DISABLED,
         remote=remote and mode == "live",
@@ -786,7 +1145,9 @@ def _manual_paid_provider() -> ProviderRecord:
 
 
 class CLIGeographyProvider:
-    provider_id = "fixture-cli-geography"
+    def __init__(self, *, fixture: bool = True) -> None:
+        self.fixture = fixture
+        self.provider_id = "fixture-cli-geography" if fixture else "gaia-local-admin-geography"
 
     async def resolve_admin(self, latitude: float, longitude: float, at_time: str | None = None) -> AdminResolution:
         if 33.5 <= latitude <= 35.5 and -119.0 <= longitude <= -117.0:
@@ -817,11 +1178,11 @@ class CLIGeographyProvider:
                 ProvenanceRecord(
                     provider=self.provider_id,
                     external_record_id=f"US:{state_code}:{county}",
-                    canonical_url="fixture://cli/geography",
-                    authority="GAIA CLI fixture geography",
+                    canonical_url="fixture://cli/geography" if self.fixture else "local://gaia/admin-geography",
+                    authority="GAIA CLI fixture geography" if self.fixture else "GAIA local deterministic admin geography",
                     geographic_scope=f"US/{state_code}/{county}",
-                    license="fixture",
-                    attribution="GAIA fixture",
+                    license="fixture" if self.fixture else "local-deterministic",
+                    attribution="GAIA fixture" if self.fixture else "GAIA local deterministic resolver",
                     content_hash=content_hash([state_code, county]),
                 )
             ],
@@ -829,7 +1190,9 @@ class CLIGeographyProvider:
 
 
 class CLIRegulatoryGeometryProvider:
-    provider_id = "fixture-cli-regulatory-geometry"
+    def __init__(self, *, fixture: bool = True) -> None:
+        self.fixture = fixture
+        self.provider_id = "fixture-cli-regulatory-geometry" if fixture else "gaia-local-regulatory-geometry"
 
     async def resolve_zones(self, latitude: float, longitude: float, at_time: str | None = None) -> RegulatoryZoneResolution:
         regulatory_zones = [AtlasZone("us-federal", "jurisdiction", "United States federal jurisdiction", "USDA APHIS")]
@@ -850,15 +1213,68 @@ class CLIRegulatoryGeometryProvider:
                 ProvenanceRecord(
                     provider=self.provider_id,
                     external_record_id="fixture-cli-zones",
-                    canonical_url="fixture://cli/zones",
-                    authority="GAIA CLI fixture regulatory geometry",
+                    canonical_url="fixture://cli/zones" if self.fixture else "local://gaia/regulatory-geometry",
+                    authority="GAIA CLI fixture regulatory geometry" if self.fixture else "GAIA local regulatory geometry",
                     geographic_scope="US",
-                    license="fixture",
-                    attribution="GAIA fixture",
+                    license="fixture" if self.fixture else "local-deterministic",
+                    attribution="GAIA fixture" if self.fixture else "GAIA local deterministic resolver",
                     content_hash=content_hash([latitude, longitude]),
                 )
             ],
         )
+
+
+def _fixture_defaults_for_runtime(database_url: str) -> bool:
+    env_mode = os.environ.get("GAIA_RUNTIME_MODE", "").strip().lower()
+    if env_mode in {"demo", "fixture", "fixtures", "test"}:
+        return True
+    if env_mode in {"normal", "manual-alpha", "manual_alpha", "live"}:
+        return False
+    return database_url in {":memory:", "sqlite:///:memory:"}
+
+
+def _fixture_provider_defaults() -> dict[str, ProviderMode]:
+    return {
+        "nws": "fixture",
+        "nasa_power": "fixture",
+        "usda_soil": "fixture",
+        "usgs_water": "fixture",
+        "gbif": "fixture",
+        "kew_powo": "disabled",
+        "genesys_pgr": "fixture",
+        "europe_pmc": "fixture",
+        "aphis": "fixture",
+        "texas_agriculture": "fixture",
+        "florida_fdacs": "fixture",
+        "usda_nass": "fixture",
+        "usda_ams": "fixture",
+        "plantnet": "disabled",
+        "google_calendar": "disabled",
+        "text_model": "local",
+        "vision_model": "local",
+    }
+
+
+def _normal_provider_defaults() -> dict[str, ProviderMode]:
+    return {
+        "nws": "live",
+        "nasa_power": "live",
+        "usda_soil": "disabled",
+        "usgs_water": "disabled",
+        "gbif": "live",
+        "kew_powo": "disabled",
+        "genesys_pgr": "disabled",
+        "europe_pmc": "live",
+        "aphis": "disabled",
+        "texas_agriculture": "disabled",
+        "florida_fdacs": "disabled",
+        "usda_nass": "live" if os.environ.get("GAIA_NASS_API_KEY") else "disabled",
+        "usda_ams": "live" if os.environ.get("GAIA_AMS_API_KEY") else "disabled",
+        "plantnet": "disabled",
+        "google_calendar": "disabled",
+        "text_model": "local",
+        "vision_model": "local",
+    }
 
 
 def _mode(key: str, default: ProviderMode) -> ProviderMode:
@@ -872,19 +1288,118 @@ def _mode(key: str, default: ProviderMode) -> ProviderMode:
 def _nws_provider(modes: AlphaProviderModes):
     if modes.nws == "live":
         return NWSApiAdapter(os.environ.get("NWS_USER_AGENT") or "GAIA Local Alpha/0.1")
+    if modes.nws == "disabled":
+        return DisabledWeatherProvider()
     return FixtureNWSProvider()
 
 
 def _nasa_power_provider(modes: AlphaProviderModes):
     if modes.nasa_power == "live":
         return NASAPowerApiAdapter(base_url=os.environ.get("NASA_POWER_BASE_URL"))
+    if modes.nasa_power == "disabled":
+        return DisabledClimateProvider()
     return FixtureNASAPowerProvider()
+
+
+def _soil_provider(modes: AlphaProviderModes):
+    if modes.usda_soil == "fixture":
+        return FixtureUSDASoilProvider()
+    return DisabledSoilSurveyProvider()
+
+
+def _water_provider(modes: AlphaProviderModes):
+    if modes.usgs_water == "fixture":
+        return FixtureUSGSWaterProvider()
+    return DisabledWaterProvider()
 
 
 def _gbif_provider(modes: AlphaProviderModes):
     if modes.gbif == "live":
         return GBIFApiAdapter(user_agent=os.environ.get("GBIF_USER_AGENT") or "GAIA Local Alpha/0.1")
+    if modes.gbif == "disabled":
+        provider = DisabledTaxonomyProvider()
+        provider.provider_id = "gbif"
+        return provider
     return FixtureGBIFProvider()
+
+
+def _kew_provider(modes: AlphaProviderModes):
+    if modes.kew_powo == "live":
+        return KewPOWOApiAdapter(user_agent=os.environ.get("KEW_USER_AGENT") or os.environ.get("GBIF_USER_AGENT") or "GAIA Local Alpha/0.1")
+    provider = DisabledTaxonomyProvider()
+    provider.provider_id = "kew-powo"
+    return provider
+
+
+def _genesys_provider(modes: AlphaProviderModes):
+    if modes.genesys_pgr == "live":
+        return GenesysPGRAdapter()
+    if modes.genesys_pgr == "fixture":
+        return FixtureGenesysProvider()
+    provider = DisabledGermplasmProvider()
+    provider.provider_id = "genesys-pgr"
+    return provider
+
+
+def _research_provider(modes: AlphaProviderModes):
+    if modes.europe_pmc == "live":
+        return EuropePMCAdapter()
+    if modes.europe_pmc == "fixture":
+        return FixtureResearchProvider()
+    return DisabledResearchProvider()
+
+
+def _nass_provider(modes: AlphaProviderModes):
+    if modes.usda_nass == "live":
+        return NASSQuickStatsProvider()
+    if modes.usda_nass == "fixture":
+        return FixtureNASSProvider()
+    provider = DisabledEconomicProvider()
+    provider.provider_id = "usda-nass"
+    return provider
+
+
+def _ams_provider(modes: AlphaProviderModes):
+    if modes.usda_ams == "live":
+        return AMSMyMarketNewsProvider()
+    if modes.usda_ams == "fixture":
+        return FixtureAMSProvider()
+    provider = DisabledEconomicProvider()
+    provider.provider_id = "usda-ams"
+    return provider
+
+
+def _aphis_provider(modes: AlphaProviderModes):
+    if modes.aphis == "live":
+        return ReadOnlyRegulatoryPageAdapter(
+            provider_id="aphis",
+            authority="USDA APHIS",
+            urls=(APHIS_CITRUS_URL, APHIS_IMPORT_URL),
+            timeout_seconds=20,
+        )
+    return FixtureAPHISProvider()
+
+
+def _texas_regulatory_provider(modes: AlphaProviderModes):
+    if modes.texas_agriculture == "live":
+        return ReadOnlyRegulatoryPageAdapter(
+            provider_id="texas-agriculture",
+            authority="Texas Department of Agriculture",
+            urls=(TEXAS_CITRUS_URL, TEXAS_GREENING_URL),
+            timeout_seconds=20,
+        )
+    return FixtureTexasAgricultureProvider()
+
+
+def _florida_regulatory_provider(modes: AlphaProviderModes):
+    if modes.florida_fdacs == "live":
+        return ReadOnlyRegulatoryPageAdapter(
+            provider_id="florida-fdacs",
+            authority="Florida Department of Agriculture and Consumer Services",
+            urls=(FDACS_PLANT_INSPECTION_URL, FDACS_CITRUS_QUARANTINE_URL, FDACS_IMPORT_REGULATIONS_URL),
+            timeout_seconds=20,
+        )
+    return FixtureFloridaFDACSProvider()
 
 
 def _live_regulatory_probes(modes: AlphaProviderModes) -> dict[str, ReadOnlyRegulatoryPageAdapter]:
@@ -894,6 +1409,13 @@ def _live_regulatory_probes(modes: AlphaProviderModes) -> dict[str, ReadOnlyRegu
             provider_id="aphis",
             authority="USDA APHIS",
             urls=(APHIS_CITRUS_URL, APHIS_IMPORT_URL),
+            timeout_seconds=20,
+        )
+    if modes.texas_agriculture == "live":
+        probes["texas-agriculture"] = ReadOnlyRegulatoryPageAdapter(
+            provider_id="texas-agriculture",
+            authority="Texas Department of Agriculture",
+            urls=(TEXAS_CITRUS_URL, TEXAS_GREENING_URL),
             timeout_seconds=20,
         )
     if modes.florida_fdacs == "live":
@@ -915,11 +1437,15 @@ def _text_model_provider(modes: AlphaProviderModes):
 def _vision_provider(modes: AlphaProviderModes):
     if modes.vision_model == "local":
         return OllamaLlavaVisionProvider(model=os.environ.get("GAIA_LLAVA_MODEL", "llava:latest"), base_url=os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"))
+    if modes.vision_model == "disabled":
+        return DisabledVisionProvider()
     return FixtureVisionProvider()
 
 
 def _vision_provider_id(modes: AlphaProviderModes) -> str:
-    return "ollama-llava-local" if modes.vision_model == "local" else "fixture-vision-local"
+    if modes.vision_model == "fixture":
+        return "fixture-vision-local"
+    return "ollama-llava-local"
 
 
 def _find_one(connection: sqlite3.Connection, table: str, column: str, value: str) -> dict | None:

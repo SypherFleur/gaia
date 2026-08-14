@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from dataclasses import asdict
 
-from packages.botany import FixtureGBIFProvider, GBIFApiAdapter
+from packages.botany import FixtureGBIFProvider, GBIFApiAdapter, KewPOWOApiAdapter
 from packages.environment.fixture_adapters import FixtureNASAPowerProvider, FixtureNWSProvider
 from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter
 from packages.research import EuropePMCAdapter, FixtureResearchProvider, normalize_europe_pmc_work
@@ -97,6 +97,29 @@ class ProtocolThreeProviderParityTest(unittest.TestCase):
 
         self.assertEqual(set(asdict(live)), set(asdict(fixture)))
         self.assertEqual(set(asdict(live.provenance[0])), set(asdict(fixture.provenance[0])))
+
+    def test_kew_powo_normalizer_preserves_rights_and_provider_boundary(self) -> None:
+        live = KewPOWOApiAdapter(user_agent="GAIA parity test").normalize_search_response(
+            "Solanum lycopersicum",
+            {
+                "results": [
+                    {
+                        "fqId": "urn:lsid:ipni.org:names:316947-2",
+                        "name": "Solanum lycopersicum L.",
+                        "rank": "Species",
+                        "family": {"name": "Solanaceae"},
+                        "genus": {"name": "Solanum"},
+                        "commonNames": ["tomato"],
+                    }
+                ]
+            },
+            "https://powo.science.kew.org/api/2/search?q=Solanum%20lycopersicum",
+        )
+
+        self.assertEqual(live.status, "ACCEPTED")
+        self.assertEqual(live.provenance[0].provider, "kew-powo")
+        self.assertIn("Kew", live.provenance[0].authority)
+        self.assertIn("kew_attribution_required", live.warnings)
 
     def test_europe_pmc_live_normalizer_matches_fixture_research_work_contract(self) -> None:
         fixture_response = run(FixtureResearchProvider().search(ResearchSearchRequest("calcium tomato", limit=1)))

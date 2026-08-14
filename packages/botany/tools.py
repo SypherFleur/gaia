@@ -52,6 +52,22 @@ class GBIFTaxonomyTool(GaiaTool):
         )
 
 
+class KewPOWOTaxonomyTool(GBIFTaxonomyTool):
+    id = "botany.kew_powo.taxonomy.resolve"
+    version = "0.1.0"
+    provider_id = "kew-powo"
+
+    async def execute(self, context: ToolExecutionContext, request: ToolRequest) -> ToolResult:
+        result = await super().execute(context, request)
+        result.data["semantic_note"] = "Kew POWO/WCVP context is global taxonomy and plant-name context, not local cultivation suitability or endorsement by Kew."
+        result.data["rights"] = {
+            "terms_url": "https://www.kew.org/about-us/terms-and-conditions",
+            "attribution_required": True,
+            "no_implied_endorsement": True,
+        }
+        return result
+
+
 class GenesysGermplasmTool(GaiaTool):
     id = "botany.genesys.germplasm.search"
     version = "0.1.0"

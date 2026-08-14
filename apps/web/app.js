@@ -2,6 +2,8 @@ const state = {
   status: null,
   identity: null,
   system: null,
+  locations: null,
+  activeLocationId: null,
   plants: [],
   selectedPlantId: null,
   lastMediaId: null,
@@ -35,6 +37,7 @@ function bindNavigation() {
   });
   $("#refresh").addEventListener("click", refreshAll);
   $("#seed-demo").addEventListener("click", seedDemo);
+  $("#device-location").addEventListener("click", useDeviceLocation);
   $("#ask-about-plant").addEventListener("click", () => {
     showView("chat");
     $("#chat-input").value = "What should I do for this plant today?";
@@ -47,6 +50,7 @@ function bindForms() {
     state.selectedPlantId = event.target.value || null;
     renderSelectedPlant();
   });
+  $("#location-select").addEventListener("change", setActiveLocationFromSelect);
   $("#chat-form").addEventListener("submit", submitChat);
   $("#plant-form").addEventListener("submit", submitPlant);
   $("#observation-form").addEventListener("submit", submitObservation);
@@ -69,18 +73,22 @@ function showView(viewName) {
 
 async function refreshAll() {
   try {
-    const [status, identity, system, plants] = await Promise.all([
+    const [status, identity, system, locations, plants] = await Promise.all([
       api("/api/v1/status"),
       api("/api/v1/dev-identity"),
       api("/api/v1/system"),
+      api("/api/v1/locations"),
       api("/api/v1/plants"),
     ]);
     state.status = status;
     state.identity = identity;
     state.system = system;
+    state.locations = locations;
+    state.activeLocationId = locations.active_location_id || identity.primary_location_id || null;
     state.plants = Array.isArray(plants) ? plants : [];
     if (!state.selectedPlantId && state.plants.length) state.selectedPlantId = state.plants[0].id;
     renderStatus();
+    renderLocations();
     renderPlants();
     renderSelectedPlant();
     renderSystem();
@@ -96,6 +104,51 @@ async function seedDemo() {
     await refreshAll();
   } catch (error) {
     toast(`Seed failed: ${error.message}`);
+  }
+}
+
+async function setActiveLocationFromSelect(event) {
+  const locationId = event.target.value || null;
+  if (!locationId) {
+    state.activeLocationId = null;
+    toast("No active location selected.");
+    return;
+  }
+  try {
+    const result = await api("/api/v1/locations/active", { method: "POST", body: { location_id: locationId } });
+    state.activeLocationId = result.active_location?.id || locationId;
+    toast(locationToast(result.active_location));
+    await refreshAll();
+  } catch (error) {
+    toast(readableError(error));
+  }
+}
+
+async function useDeviceLocation() {
+  if (!navigator.geolocation) return toast("Browser geolocation is unavailable.");
+  $("#device-location").disabled = true;
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 12000, maximumAge: 600000 });
+    });
+    const { latitude, longitude, accuracy } = position.coords;
+    const result = await api("/api/v1/locations/active", {
+      method: "POST",
+      body: {
+        source_kind: "device",
+        label: "Device location",
+        latitude,
+        longitude,
+        accuracy_m: accuracy,
+      },
+    });
+    state.activeLocationId = result.active_location?.id || null;
+    toast(locationToast(result.active_location));
+    await refreshAll();
+  } catch (error) {
+    toast(error.message || "Location permission was not granted.");
+  } finally {
+    $("#device-location").disabled = false;
   }
 }
 
@@ -127,7 +180,7 @@ async function streamChat(message, node) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message,
-      location_id: state.identity?.primary_location_id,
+      location_id: activeLocationId(),
       user_plant_id: state.selectedPlantId,
       conversation_id: state.lastConversationId,
     }),
@@ -181,7 +234,7 @@ async function submitPlant(event) {
         taxon: data.get("taxon"),
         nickname: data.get("nickname"),
         cultivar: data.get("cultivar"),
-        location_id: state.identity?.primary_location_id,
+        location_id: activeLocationId(),
         lifecycle_stage: "vegetative",
       },
     });
@@ -234,7 +287,7 @@ async function uploadAndAnalyzeImage(file, origin) {
     body: {
       media_attachment_id: media.id,
       user_plant_id: state.selectedPlantId,
-      location_id: state.identity?.primary_location_id,
+      location_id: activeLocationId(),
     },
   });
   renderVision(analysis);
@@ -253,7 +306,7 @@ async function submitSeason(event) {
         objective: data.get("goal"),
         start_date: data.get("start"),
         end_date: data.get("end"),
-        location_id: state.identity?.primary_location_id,
+        location_id: activeLocationId(),
         include_mercator: true,
       },
     });
@@ -329,7 +382,7 @@ async function submitMarkets(event) {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
   try {
-    const result = await api("/api/v1/markets/context", { method: "POST", body: { commodity: data.get("commodity") } });
+    const result = await api("/api/v1/markets/context", { method: "POST", body: { commodity: data.get("commodity"), location_id: activeLocationId() } });
     renderMarkets(result);
   } catch (error) {
     toast(readableError(error));
@@ -341,6 +394,23 @@ function renderStatus() {
   $("#sidebar-spend").textContent = `$${Number(state.system?.cost?.total_development_cash_spent || 0).toFixed(2)}`;
   $("#sidebar-db").textContent = state.status?.database || "SQLite";
   $("#sidebar-model").textContent = state.status?.text_model || "unknown";
+}
+
+function renderLocations() {
+  const select = $("#location-select");
+  const locations = state.locations?.locations || [];
+  select.innerHTML = `<option value="">No active real location</option>`;
+  for (const location of locations) {
+    const option = document.createElement("option");
+    option.value = location.id;
+    option.textContent = `${location.label} - ${location.source_kind || "saved"}`;
+    option.selected = location.id === state.activeLocationId;
+    select.appendChild(option);
+  }
+  const active = state.locations?.active_location;
+  select.title = active
+    ? `${active.source_kind}: ${active.admin2 || active.label}`
+    : "No active location. Use browser location or select a saved/demo location.";
 }
 
 function renderPlants() {
@@ -456,6 +526,7 @@ function renderMarkets(result) {
 
 function renderSystem() {
   const status = state.system || {};
+  const active = state.locations?.active_location;
   const automaticPaidUsage = status.cost?.automatic_paid_usage_enabled ? "ON" : "OFF";
   $("#system-list").innerHTML = [
     metricRow("UI", status.ui_url),
@@ -467,6 +538,7 @@ function renderSystem() {
     metricRow("Spend", `$${Number(status.cost?.total_development_cash_spent || 0).toFixed(2)}`),
     metricRow("Reserve", `$${Number(status.cost?.reserve_remaining || 20).toFixed(2)}`),
     metricRow("Telemetry", status.telemetry),
+    metricRow("Active location", active ? `${active.label} (${active.source_kind})` : "none"),
     metricRow("Git", status.git_commit),
   ].join("");
   $("#provider-list").innerHTML = (status.providers || []).map((provider) => sourceCard(provider.provider_id, provider.enabled ? provider.mode : "disabled", provider.billing_class)).join("");
@@ -549,6 +621,16 @@ function metric(label, value) {
 
 function metricRow(label, value) {
   return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value ?? "unknown")}</dd></div>`;
+}
+
+function activeLocationId() {
+  return state.activeLocationId || null;
+}
+
+function locationToast(location) {
+  if (!location) return "No active location selected.";
+  const county = location.admin2 ? `, ${location.admin2}` : "";
+  return `${location.source_kind || "saved"} location active${county}.`;
 }
 
 function toast(message) {

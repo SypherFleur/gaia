@@ -73,6 +73,8 @@ class MigrationSchemaTest(unittest.TestCase):
         defaults = {column["name"]: column["dflt_value"] for column in columns}
 
         self.assertEqual(defaults["privacy_precision"], "'approximate'")
+        self.assertEqual(defaults["source_kind"], "'saved'")
+        self.assertEqual(defaults["is_demo"], "0")
         connection.close()
 
 
