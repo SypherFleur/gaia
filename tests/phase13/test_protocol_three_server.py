@@ -8,10 +8,12 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from apps.api.gaia_api.runtime import AlphaProviderModes, create_runtime, persistence_summary, seed_demo
@@ -19,6 +21,7 @@ from apps.cli.gaia import main
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
 
 class ProtocolThreeServerTest(unittest.TestCase):
@@ -88,9 +91,93 @@ class ProtocolThreeServerTest(unittest.TestCase):
                 self.assertIn('data-view="chat"', html)
                 self.assertIn("/api/v1/chat/stream", javascript)
                 self.assertIn("/api/v1/seed/demo", javascript)
+                self.assertIn("automatic_paid_usage_enabled", javascript)
                 self.assertIn(".app-shell", stylesheet)
                 self.assertNotIn("Core chat and context diagnostics", html)
                 self.assertNotIn("static demo", javascript.lower())
+            finally:
+                stop_server(process)
+
+    def test_manual_alpha_fixture_scenarios_cover_owner_checklist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            port = free_port()
+            database = f"sqlite:///{Path(tmp) / 'gaia-owner-smoke.sqlite3'}"
+            process = start_server(port, database)
+            try:
+                base = f"http://127.0.0.1:{port}"
+                wait_json(f"{base}/api/v1/status")
+                seed = post_json(f"{base}/api/v1/seed/demo", {})
+                plants = wait_json(f"{base}/api/v1/plants")
+                plant_id = plants[0]["id"]
+
+                geography = post_json(f"{base}/api/v1/context/geography", {"location_id": seed["primary_location_id"]})
+                self.assertEqual(geography["geo_context"]["county_or_district"], "Travis County")
+
+                environment = post_json(f"{base}/api/v1/context/environment", {"location_id": seed["primary_location_id"]})
+                self.assertEqual(environment["model_run_count"], 0)
+                self.assertIn(environment["environmental_snapshot"]["provider_statuses"]["nws"], {"AVAILABLE", "CACHE_HIT"})
+
+                research = post_json(
+                    f"{base}/api/v1/research/synthesize",
+                    {"question": "What research supports tomato companion planting?", "user_plant_id": plant_id, "use_model": False},
+                )
+                self.assertIn("evidence_quality", research)
+
+                movement = post_json(
+                    f"{base}/api/v1/movement/check",
+                    {
+                        "origin_alias": "tx-houston",
+                        "destination_alias": "fl-orlando",
+                        "species": "Citrus sinensis",
+                        "plant_part": "live plant",
+                        "live_plant": True,
+                    },
+                )
+                self.assertEqual(movement["status"], "RESTRICTED")
+                self.assertTrue(any(rule["jurisdiction_pack"] == "us_fl" for rule in movement["applicable_rules"]))
+
+                market = post_json(f"{base}/api/v1/markets/context", {"commodity": "tomato", "location_id": seed["primary_location_id"]})
+                self.assertEqual(market["commodity"]["canonical_name"], "tomato")
+                self.assertIn("markets", market["freshness"])
+
+                chat = post_json(
+                    f"{base}/api/v1/chat",
+                    {"message": "What is the tomato market context?", "location_id": seed["primary_location_id"], "user_plant_id": plant_id},
+                )
+                self.assertEqual(chat["route"], "economics")
+                self.assertTrue(chat["source_record_ids"])
+
+                media = post_json(
+                    f"{base}/api/v1/vision/media",
+                    {"image_base64": TINY_PNG_BASE64, "content_type": "image/png", "user_plant_id": plant_id},
+                )
+                analysis = post_json(
+                    f"{base}/api/v1/vision/analyze",
+                    {"media_attachment_id": media["id"], "user_plant_id": plant_id, "location_id": seed["primary_location_id"]},
+                )
+                self.assertIn(analysis["provider_status"], {"AVAILABLE", "VALIDATION_FAILED"})
+                self.assertNotIn("inline_base64", media["metadata"])
+
+                season = post_json(
+                    f"{base}/api/v1/season/plan",
+                    {
+                        "crop_names": ["tomato"],
+                        "objective": "Create a fall care plan for Cherokee Purple Tomato.",
+                        "start_date": "2026-09-15",
+                        "end_date": "2026-12-15",
+                        "location_id": seed["primary_location_id"],
+                        "include_mercator": True,
+                    },
+                )
+                self.assertTrue(season["actions"])
+                calendar = post_json(f"{base}/api/v1/calendar/preview", {"season_plan_id": season["season_plan"]["id"]})
+                self.assertEqual(calendar["status"], "preview")
+                self.assertTrue(calendar["event_previews"])
+
+                system = wait_json(f"{base}/api/v1/system")
+                self.assertEqual(system["cost"]["total_development_cash_spent"], 0.0)
+                self.assertFalse(system["cost"]["paid_providers_enabled"])
+                self.assertGreaterEqual(system["persistence"]["guidance_plan_count"], 1)
             finally:
                 stop_server(process)
 
@@ -114,6 +201,27 @@ class ProtocolThreeServerTest(unittest.TestCase):
             finally:
                 restore_env("GAIA_TEXT_MODEL_MODE", old_text_mode)
                 restore_env("GAIA_VISION_MODEL_MODE", old_vision_mode)
+
+    def test_gaia_dev_fails_on_port_collision_with_non_gaia_server(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            port = free_port()
+            database = f"sqlite:///{Path(tmp) / 'gaia-port-collision.sqlite3'}"
+            fake_server = ThreadingHTTPServer(("127.0.0.1", port), FakeStatusHandler)
+            thread = threading.Thread(target=fake_server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = main(["--database", database, "dev", "--port", str(port), "--startup-timeout", "4", "--smoke-seconds", "0.1"])
+                payload = json.loads(output.getvalue())
+
+                self.assertEqual(code, 1)
+                self.assertEqual(payload["status"], "failed")
+                self.assertIn(payload["reason"], {"server_process_exited", "server_not_reachable"})
+            finally:
+                fake_server.shutdown()
+                fake_server.server_close()
+                thread.join(timeout=5)
 
 
 def start_server(port: int, database: str) -> subprocess.Popen:
@@ -197,6 +305,23 @@ def restore_env(key: str, value: str | None) -> None:
         os.environ.pop(key, None)
     else:
         os.environ[key] = value
+
+
+class FakeStatusHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        if self.path.rstrip("/") == "/api/v1/status":
+            body = json.dumps({"name": "not GAIA", "status": "ok"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
 
 
 if __name__ == "__main__":

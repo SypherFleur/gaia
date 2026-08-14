@@ -163,9 +163,10 @@ function handleStreamEvent(raw, node) {
     state.lastConversationId = result.conversation_id;
     $("#chat-route").textContent = result.route;
     $("#chat-model-runs").textContent = String(result.model_run_count);
-    $("#chat-source-count").textContent = String(result.context_bundle?.source_record_ids?.length || result.source_record_ids?.length || 0);
+    const sourceIds = result.source_record_ids || result.context_bundle?.source_record_ids || [];
+    $("#chat-source-count").textContent = String(sourceIds.length);
     renderGuidance(result);
-    renderSourceChips(result.context_bundle?.source_record_ids || []);
+    renderSourceChips(sourceIds);
     refreshAll();
   }
 }
@@ -455,13 +456,14 @@ function renderMarkets(result) {
 
 function renderSystem() {
   const status = state.system || {};
+  const automaticPaidUsage = status.cost?.automatic_paid_usage_enabled ? "ON" : "OFF";
   $("#system-list").innerHTML = [
     metricRow("UI", status.ui_url),
     metricRow("API", status.api_url),
     metricRow("Database", status.database),
     metricRow("Text model", status.text_model),
     metricRow("Vision model", status.vision_model),
-    metricRow("Automatic paid usage", "OFF"),
+    metricRow("Automatic paid usage", automaticPaidUsage),
     metricRow("Spend", `$${Number(status.cost?.total_development_cash_spent || 0).toFixed(2)}`),
     metricRow("Reserve", `$${Number(status.cost?.reserve_remaining || 20).toFixed(2)}`),
     metricRow("Telemetry", status.telemetry),

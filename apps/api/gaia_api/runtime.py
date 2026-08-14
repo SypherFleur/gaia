@@ -366,29 +366,45 @@ def create_runtime(
 def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool = False) -> dict:
     organization = _find_one(repository.connection, "organizations", "slug", "gaia-local-alpha")
     if organization is None:
-        organization_obj = repository.create_organization(
-            Organization(name="GAIA Local Alpha", slug="gaia-local-alpha", deployment_mode="sovereign" if sovereign else "local")
-        )
-        organization_id = organization_obj.id
+        try:
+            organization_obj = repository.create_organization(
+                Organization(name="GAIA Local Alpha", slug="gaia-local-alpha", deployment_mode="sovereign" if sovereign else "local")
+            )
+            organization_id = organization_obj.id
+        except sqlite3.IntegrityError:
+            organization = _find_one(repository.connection, "organizations", "slug", "gaia-local-alpha")
+            if organization is None:
+                raise
+            organization_id = organization["id"]
     else:
         organization_id = organization["id"]
 
     user = _find_user(repository.connection, "development:jason")
     if user is None:
-        user_obj = repository.create_user(User(external_auth_id="development:jason", display_name="Jason Development Identity", timezone="America/Chicago"))
-        user_id = user_obj.id
+        try:
+            user_obj = repository.create_user(User(external_auth_id="development:jason", display_name="Jason Development Identity", timezone="America/Chicago"))
+            user_id = user_obj.id
+        except sqlite3.IntegrityError:
+            user = _find_user(repository.connection, "development:jason")
+            if user is None:
+                raise
+            user_id = user["id"]
     else:
         user_id = user["id"]
 
     if _membership(repository.connection, organization_id, user_id) is None:
-        repository.create_membership(
-            Membership(
-                organization_id=organization_id,
-                user_id=user_id,
-                role="owner",
-                permissions=["tool.read", "regulation.read", "vision.analyze", "model.chat", "calendar.create"],
+        try:
+            repository.create_membership(
+                Membership(
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    role="owner",
+                    permissions=["tool.read", "regulation.read", "vision.analyze", "model.chat", "calendar.create"],
+                )
             )
-        )
+        except sqlite3.IntegrityError:
+            if _membership(repository.connection, organization_id, user_id) is None:
+                raise
 
     workspace = _workspace(repository.connection, organization_id, "Alpha Workspace")
     if workspace is None:
@@ -407,19 +423,25 @@ def ensure_development_identity(repository: GaiaRepository, *, sovereign: bool =
 
     calendar_binding = _calendar_binding(repository.connection, organization_id, user_id)
     if calendar_binding is None:
-        binding = repository.create_calendar_binding(
-            CalendarBinding(
-                organization_id=organization_id,
-                user_id=user_id,
-                provider="fixture-calendar",
-                external_calendar_id="fixture-primary",
-                encrypted_credential_reference="fixture-local-alpha",
-                credential_reference="fixture-local-alpha",
-                scopes=["calendar.create"],
-                status="connected",
+        try:
+            binding = repository.create_calendar_binding(
+                CalendarBinding(
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    provider="fixture-calendar",
+                    external_calendar_id="fixture-primary",
+                    encrypted_credential_reference="fixture-local-alpha",
+                    credential_reference="fixture-local-alpha",
+                    scopes=["calendar.create"],
+                    status="connected",
+                )
             )
-        )
-        calendar_binding_id = binding.id
+            calendar_binding_id = binding.id
+        except sqlite3.IntegrityError:
+            calendar_binding = _calendar_binding(repository.connection, organization_id, user_id)
+            if calendar_binding is None:
+                raise
+            calendar_binding_id = calendar_binding["id"]
     else:
         calendar_binding_id = calendar_binding["id"]
 
@@ -604,12 +626,14 @@ def provider_health_rows(runtime: GaiaRuntime) -> list[dict]:
     rows = []
     for provider in runtime.registry.all():
         mode = provider_mode_for_provider(provider.provider_id, modes)
+        if not provider.enabled:
+            mode = "disabled"
         row = {
             "provider_id": provider.provider_id,
             "enabled": provider.enabled,
             "mode": mode,
             "remote": provider.remote,
-            "health": runtime.tool_gateway.health_monitor.status(provider.provider_id).value,
+            "health": HealthStatus.DISABLED.value if not provider.enabled else runtime.tool_gateway.health_monitor.status(provider.provider_id).value,
             "billing_class": provider.billing_class.value,
             "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
             "allow_overage": provider.cost_policy.allow_overage,

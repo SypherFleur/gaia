@@ -68,6 +68,20 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
         finally:
             runtime.close()
 
+    def test_disabled_provider_health_and_mode_are_explicit(self) -> None:
+        runtime = create_runtime("sqlite:///:memory:", provider_modes=AlphaProviderModes(text_model="fixture", vision_model="fixture"))
+        try:
+            rows = {row["provider_id"]: row for row in provider_health_rows(runtime)}
+
+            self.assertEqual(rows["google-calendar"]["mode"], "disabled")
+            self.assertEqual(rows["google-calendar"]["health"], "DISABLED")
+            self.assertEqual(rows["plantnet"]["mode"], "disabled")
+            self.assertEqual(rows["future-paid-provider"]["mode"], "disabled")
+            self.assertEqual(rows["future-paid-provider"]["health"], "DISABLED")
+            self.assertEqual(rows["future-paid-provider"]["billing_class"], "MANUAL_PAID")
+        finally:
+            runtime.close()
+
 
 if __name__ == "__main__":
     unittest.main()

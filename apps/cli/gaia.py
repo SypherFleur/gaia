@@ -217,10 +217,17 @@ def handle_dev(args: argparse.Namespace) -> JsonDict:
     process = subprocess.Popen(command, cwd=ROOT)
     url = f"http://{args.host}:{args.port}/api/v1/status"
     try:
-        reachable = _wait_for_url(url, args.startup_timeout)
-        if not reachable:
+        readiness = _wait_for_gaia_server(url, process, args.startup_timeout)
+        if not readiness["ready"]:
             _terminate(process)
-            return {"status": "failed", "reason": "server_not_reachable", "command": _copy_paste_command(args), "ui_url": f"http://{args.host}:{args.port}/"}
+            return {
+                "status": "failed",
+                "reason": readiness["reason"],
+                "detail": readiness.get("detail"),
+                "exit_code": readiness.get("exit_code"),
+                "command": _copy_paste_command(args),
+                "ui_url": f"http://{args.host}:{args.port}/",
+            }
         print("GAIA Local Alpha")
         print(f"UI: http://{args.host}:{args.port}/")
         print(f"API: http://{args.host}:{args.port}/api/v1")
@@ -510,15 +517,27 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _wait_for_url(url: str, timeout_seconds: float) -> bool:
+def _wait_for_gaia_server(url: str, process: subprocess.Popen, timeout_seconds: float) -> JsonDict:
     deadline = time.time() + timeout_seconds
+    last_error = "not reachable yet"
     while time.time() < deadline:
+        exit_code = process.poll()
+        if exit_code is not None:
+            return {"ready": False, "reason": "server_process_exited", "exit_code": exit_code, "detail": last_error}
         try:
             with urllib.request.urlopen(url, timeout=1) as response:
-                return response.status == 200
-        except urllib.error.URLError:
+                payload = json.loads(response.read().decode("utf-8"))
+                if (
+                    response.status == 200
+                    and payload.get("name") == "GAIA Local Alpha"
+                    and payload.get("spend_policy") == "$0 automatic paid usage"
+                ):
+                    return {"ready": True, "reason": "ok"}
+                last_error = "unexpected response at GAIA status URL"
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+            last_error = exc.__class__.__name__
             time.sleep(0.2)
-    return False
+    return {"ready": False, "reason": "server_not_reachable", "detail": last_error}
 
 
 def _terminate(process: subprocess.Popen) -> None:

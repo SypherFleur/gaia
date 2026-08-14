@@ -355,8 +355,12 @@ def dev_identity_payload(runtime: GaiaRuntime) -> dict:
 
 def providers_payload(runtime: GaiaRuntime) -> dict:
     modes = runtime.provider_modes.to_dict()
-    return {
-        "providers": [
+    providers = []
+    for provider in runtime.registry.all():
+        mode = provider_mode_for_provider(provider.provider_id, modes)
+        if not provider.enabled:
+            mode = "disabled"
+        providers.append(
             {
                 "provider_id": provider.provider_id,
                 "display_name": provider.display_name,
@@ -364,14 +368,13 @@ def providers_payload(runtime: GaiaRuntime) -> dict:
                 "billing_class": provider.billing_class.value,
                 "enabled": provider.enabled,
                 "remote": provider.remote,
-                "mode": provider_mode_for_provider(provider.provider_id, modes),
+                "mode": mode,
                 "hard_monthly_usd": provider.cost_policy.hard_monthly_usd,
                 "allow_overage": provider.cost_policy.allow_overage,
                 "authentication_requirement": provider.authentication_requirement.value,
             }
-            for provider in runtime.registry.all()
-        ]
-    }
+        )
+    return {"providers": providers}
 
 
 def provider_health_payload(runtime: GaiaRuntime) -> dict:

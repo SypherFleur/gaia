@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from packages.context import ContextBundle, ContextCompiler
@@ -29,6 +29,7 @@ class ChatResult:
     assistant_message_id: str
     route: RouteDecision | str
     content: str
+    source_record_ids: list[str] = field(default_factory=list)
     context_bundle: ContextBundle | None = None
     guidance_plan_id: str | None = None
     model_run_ids: list[str] | None = None
@@ -117,6 +118,7 @@ class GaiaOrchestrator:
             assistant_message_id=assistant_message.id,
             route="geography",
             content=content,
+            source_record_ids=geo.source_record_ids,
             context_bundle=bundle,
             model_run_ids=[],
             model_run_count=0,
@@ -178,6 +180,7 @@ class GaiaOrchestrator:
             assistant_message_id=assistant_message.id,
             route="economics",
             content=content,
+            source_record_ids=mercator.source_record_ids,
             model_run_ids=[],
             model_run_count=0,
             provider_diagnostics={"mercator": mercator.provider_statuses},
@@ -227,6 +230,7 @@ class GaiaOrchestrator:
             assistant_message_id=assistant_message.id,
             route="environment",
             content=content,
+            source_record_ids=source_ids,
             context_bundle=bundle,
             model_run_ids=[],
             model_run_count=0,
@@ -352,6 +356,7 @@ class GaiaOrchestrator:
             assistant_message_id=assistant_message.id,
             route="reasoning",
             content=content,
+            source_record_ids=source_record_ids,
             context_bundle=bundle,
             guidance_plan_id=guidance_plan.id,
             model_run_ids=[model_response.model_run_id] if model_response.model_run_id else [],
@@ -434,6 +439,7 @@ class GaiaOrchestrator:
             assistant_message_id=assistant_message.id,
             route="reasoning_validation_failed",
             content=content,
+            source_record_ids=bundle.to_dict()["source_record_ids"],
             context_bundle=bundle,
             guidance_plan_id=None,
             model_run_ids=[model_run_id] if model_run_id else [],
