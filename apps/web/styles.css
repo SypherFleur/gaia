@@ -420,6 +420,7 @@ pre {
 .detail-panel,
 .status-card,
 .guidance-card,
+.environment-card,
 .timeline-item,
 .source-card,
 .metric {
@@ -427,6 +428,16 @@ pre {
   border-radius: 8px;
   background: #fbfcfd;
   padding: 12px;
+}
+
+.environment-card {
+  display: grid;
+  gap: 12px;
+}
+
+.environment-card > strong {
+  color: var(--ink);
+  font-size: 1rem;
 }
 
 .status-card[data-status="DENY"],

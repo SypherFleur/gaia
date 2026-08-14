@@ -36,6 +36,7 @@ class ChatResult:
     model_run_ids: list[str] | None = None
     model_run_count: int = 0
     provider_diagnostics: dict | None = None
+    structured_response: dict | None = None
     validation_error: str | None = None
 
 
@@ -207,18 +208,8 @@ class GaiaOrchestrator:
         bundle = await self.context_compiler.build_environmental_context(context, location_id)
         snapshot = bundle.environmental_snapshot
         geo = bundle.geo_context
-        temperature = snapshot.temperature if snapshot is not None else {}
-        soil = snapshot.soil_context if snapshot is not None else {}
-        temp_text = _measurement_text(temperature)
-        map_unit = soil.get("map_unit")
-        if isinstance(map_unit, dict):
-            soil_text = map_unit.get("name") or soil.get("semantic_note") or "soil survey context unavailable"
-        else:
-            soil_text = map_unit or soil.get("semantic_note") or "soil survey context unavailable"
-        content = (
-            f"For {geo.county_or_district or geo.state_or_region}, GAIA has environmental context. "
-            f"Temperature context: {temp_text}. Soil context: {soil_text}."
-        )
+        report = _environment_report(bundle)
+        content = _render_environment_report(report)
         source_ids = snapshot.source_record_ids if snapshot is not None else geo.source_record_ids
         assistant_message = self.repository.create_message(
             Message(
@@ -230,6 +221,7 @@ class GaiaOrchestrator:
                 source_record_ids=source_ids,
                 metadata={
                     "model_run_count": 0,
+                    "environment_report": report,
                     "atlas_provider_statuses": bundle.atlas.provider_statuses,
                     "terra_provider_statuses": snapshot.provider_statuses if snapshot is not None else {},
                 },
@@ -249,6 +241,7 @@ class GaiaOrchestrator:
                 "atlas": bundle.atlas.provider_statuses,
                 "terra": snapshot.provider_statuses if snapshot is not None else {},
             },
+            structured_response=report,
         )
 
     async def _handle_reasoning(
@@ -546,7 +539,7 @@ def classify_route(message: str) -> RouteDecision:
         return "economics"
     if "county" in text or "hardiness zone" in text or "where am i" in text:
         return "geography"
-    if "environmental condition" in text or "weather" in text or "soil" in text or "temperature" in text:
+    if _asks_for_environment(message):
         return "environment"
     return "reasoning"
 
@@ -563,6 +556,191 @@ def _extract_crops(message: str) -> list[str]:
 def _asks_for_economics(message: str) -> bool:
     text = message.lower()
     return any(term in text for term in ["market", "price", "prices", "production", "economically", "economic", "supply-chain", "supply chain", "wholesale"])
+
+
+def _asks_for_environment(message: str) -> bool:
+    text = message.lower()
+    if "good for planting" in text:
+        return True
+    if any(term in text for term in ["what should i do", "what do i do", "what should we do", "what should i consider", "recommend", "advice"]):
+        return False
+    return any(
+        term in text
+        for term in [
+            "environmental condition",
+            "environmental conditions",
+            "growing condition",
+            "growing conditions",
+            "weather",
+            "conditions outside",
+            "outside conditions",
+            "how hot",
+            "how cold",
+            "temperature",
+            "humidity",
+            "rain",
+            "wind",
+            "soil",
+            "day length",
+            "daylight",
+            "photoperiod",
+            "solar radiation",
+        ]
+    )
+
+
+def _environment_report(bundle: ContextBundle) -> dict:
+    geo = bundle.geo_context
+    snapshot = bundle.environmental_snapshot
+    report = {
+        "type": "environment_report",
+        "location": _location_report(geo),
+        "temperature": _measurement_report(snapshot.temperature if snapshot is not None else {}),
+        "precipitation_probability": _measurement_report(snapshot.precipitation if snapshot is not None else {}),
+        "humidity": _measurement_report(snapshot.humidity if snapshot is not None else {}),
+        "wind": _wind_report(snapshot.wind if snapshot is not None else {}),
+        "alerts": (snapshot.forecast.get("alerts") if snapshot is not None and isinstance(snapshot.forecast, dict) else []) or [],
+        "photoperiod": _measurement_report(snapshot.photoperiod if snapshot is not None else {}, decimals=1),
+        "solar_radiation": _measurement_report(snapshot.solar_radiation if snapshot is not None else {}),
+        "soil_context": _context_status_report(snapshot.soil_context if snapshot is not None else {}),
+        "soil_moisture_context": _context_status_report(snapshot.soil_moisture_context if snapshot is not None else {}),
+        "water_context": _context_status_report(snapshot.water_context if snapshot is not None else {}),
+        "drought_context": _context_status_report(snapshot.drought_context if snapshot is not None else {}),
+        "retrieved_at": snapshot.retrieved_at if snapshot is not None else None,
+        "valid_at": snapshot.observed_or_valid_at if snapshot is not None else None,
+        "sources": {
+            "source_record_ids": sorted(set(geo.source_record_ids) | set(snapshot.source_record_ids if snapshot is not None else [])),
+            "atlas_provider_statuses": bundle.atlas.provider_statuses,
+            "terra_provider_statuses": snapshot.provider_statuses if snapshot is not None else {},
+        },
+    }
+    return _strip_none(report)
+
+
+def _location_report(geo) -> dict:
+    return _strip_none(
+        {
+            "label": _location_name(geo),
+            "country_code": geo.country_code,
+            "state_or_region": geo.state_or_region,
+            "state_code": geo.state_code,
+            "county_or_district": geo.county_or_district,
+            "county_fips": geo.county_fips,
+            "timezone": geo.timezone,
+        }
+    )
+
+
+def _location_name(geo) -> str:
+    area = geo.county_or_district or geo.state_or_region or geo.country or "this location"
+    if geo.county_or_district and geo.state_or_region:
+        return f"{geo.county_or_district}, {geo.state_or_region}"
+    return area
+
+
+def _measurement_report(measurement: dict, *, decimals: int | None = None) -> dict:
+    if not isinstance(measurement, dict) or not measurement:
+        return {"status": "unavailable"}
+    value = measurement.get("value")
+    if value is None:
+        return {"status": "unavailable"}
+    if isinstance(value, float) and decimals is not None:
+        value = round(value, decimals)
+    return _strip_none(
+        {
+            "status": "available",
+            "value": value,
+            "unit": measurement.get("unit"),
+            "evidence_type": measurement.get("evidence_type"),
+            "parameter": measurement.get("parameter"),
+        }
+    )
+
+
+def _wind_report(wind: dict) -> dict:
+    if not isinstance(wind, dict) or not wind:
+        return {"status": "unavailable"}
+    speed = wind.get("speed")
+    direction = wind.get("direction")
+    if speed is None and direction is None:
+        return {"status": "unavailable"}
+    return _strip_none({"status": "available", "speed": speed, "direction": direction, "unit": wind.get("unit"), "evidence_type": wind.get("evidence_type")})
+
+
+def _context_status_report(context: dict) -> dict:
+    if not isinstance(context, dict) or not context:
+        return {"status": "unavailable"}
+    status = str(context.get("status") or "").upper()
+    if status in {"UNAVAILABLE", "DENIED", "FAILED", "PROVIDER_ERROR"}:
+        return _strip_none({"status": "unavailable", "reason": context.get("semantic_note") or context.get("denial_reason") or status.lower()})
+    if "map_unit" in context:
+        return _strip_none({"status": "available", "map_unit": context.get("map_unit"), "semantic_note": context.get("semantic_note")})
+    return _strip_none({"status": "available", "summary": context.get("semantic_note") or context.get("summary")})
+
+
+def _render_environment_report(report: dict) -> str:
+    location = report.get("location", {})
+    lines = [f"Current growing conditions for {location.get('label') or 'this location'}:", ""]
+    lines.append(f"Temperature: {_measurement_line(report.get('temperature'))}")
+    lines.append(f"Rain chance: {_measurement_line(report.get('precipitation_probability'))}")
+    lines.append(f"Wind: {_wind_line(report.get('wind'))}")
+    lines.append(f"Day length: {_photoperiod_line(report.get('photoperiod'))}")
+    lines.append(f"Humidity: {_measurement_line(report.get('humidity'))}")
+    lines.append(f"Solar radiation: {_measurement_line(report.get('solar_radiation'))}")
+    lines.append(f"Soil moisture: {_context_line(report.get('soil_moisture_context'))}")
+    lines.append(f"Soil context: {_context_line(report.get('soil_context'))}")
+    lines.append(f"Water context: {_context_line(report.get('water_context'))}")
+    constraint = _environment_constraint(report)
+    if constraint:
+        lines.extend(["", constraint])
+    return "\n".join(lines)
+
+
+def _measurement_line(measurement: dict | None) -> str:
+    if not isinstance(measurement, dict) or measurement.get("status") != "available":
+        return "unavailable"
+    value = measurement.get("value")
+    unit = measurement.get("unit")
+    return f"{value} {unit}".strip()
+
+
+def _wind_line(wind: dict | None) -> str:
+    if not isinstance(wind, dict) or wind.get("status") != "available":
+        return "unavailable"
+    direction = wind.get("direction")
+    speed = wind.get("speed")
+    if direction and speed:
+        return f"{direction} at {speed}"
+    return str(speed or direction)
+
+
+def _photoperiod_line(measurement: dict | None) -> str:
+    if not isinstance(measurement, dict) or measurement.get("status") != "available":
+        return "unavailable"
+    return f"about {_measurement_line(measurement)}"
+
+
+def _context_line(context: dict | None) -> str:
+    if not isinstance(context, dict) or context.get("status") != "available":
+        return "unavailable"
+    return str(context.get("map_unit") or context.get("summary") or context.get("semantic_note") or "available")
+
+
+def _environment_constraint(report: dict) -> str | None:
+    temperature = report.get("temperature", {})
+    value = temperature.get("value") if isinstance(temperature, dict) else None
+    unit = str(temperature.get("unit") or "").upper() if isinstance(temperature, dict) else ""
+    if isinstance(value, (int, float)) and ((unit == "F" and value >= 90) or (unit == "C" and value >= 32)):
+        return "The heat is the main immediate growing constraint."
+    return None
+
+
+def _strip_none(value):
+    if isinstance(value, dict):
+        return {key: _strip_none(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_strip_none(item) for item in value if item is not None]
+    return value
 
 
 def _measurement_text(measurement: dict) -> str:

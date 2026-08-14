@@ -11,6 +11,9 @@ from packages.environment.providers import EnvironmentalProviderResult
 from packages.provenance import ProvenanceRecord, content_hash
 
 
+NASA_POWER_MISSING_VALUES = {-999, -999.0, -9999, -9999.0}
+
+
 class NWSApiAdapter:
     provider_id = "nws"
     base_url = "https://api.weather.gov"
@@ -183,7 +186,23 @@ class USDASoilDataAccessAdapter:
 def _first_value(values: dict) -> float | None:
     if not values:
         return None
-    return next(iter(values.values()))
+    return _normalize_power_value(next(iter(values.values())))
+
+
+def _normalize_power_value(value) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            value = float(stripped)
+        except ValueError:
+            return None
+    if value in NASA_POWER_MISSING_VALUES:
+        return None
+    return value
 
 
 def _power_date(at_time: str | None) -> str:

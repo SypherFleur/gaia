@@ -65,6 +65,24 @@ class ProtocolThreeProviderParityTest(unittest.TestCase):
         self.assertEqual(set(live.data), set(fixture.data))
         self.assertEqual(set(asdict(live.provenance[0])), set(asdict(fixture.provenance[0])))
 
+    def test_nasa_power_fill_values_normalize_to_missing(self) -> None:
+        live = NASAPowerApiAdapter().normalize_daily_response(
+            {
+                "properties": {
+                    "parameter": {
+                        "T2M": {"20260814": 35.5},
+                        "PRECTOTCORR": {"20260814": -999},
+                        "ALLSKY_SFC_SW_DWN": {"20260814": "-999.0"},
+                    }
+                }
+            },
+            "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M",
+        )
+
+        self.assertEqual(live.data["temperature_history"]["value"], 35.5)
+        self.assertIsNone(live.data["precipitation_context"]["value"])
+        self.assertIsNone(live.data["solar_radiation"]["value"])
+
     def test_nasa_power_live_climate_context_uses_normalized_contract(self) -> None:
         adapter = StubNASAPowerAdapter()
         result = run(adapter.climate_context(30.2672, -97.7431, "2026-08-14T00:00:00Z"))

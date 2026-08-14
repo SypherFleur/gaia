@@ -492,6 +492,10 @@ async function renderSelectedPlant() {
 }
 
 function renderGuidance(result) {
+  if (result.route === "environment" && result.structured_response?.type === "environment_report") {
+    $("#guidance-card").innerHTML = environmentCard(result.structured_response);
+    return;
+  }
   if (result.guidance_plan_id) {
     $("#guidance-card").innerHTML = `<strong>Saved GuidancePlan</strong><span>${result.guidance_plan_id}</span><p>${escapeHtml(result.content)}</p>`;
   } else {
@@ -655,6 +659,27 @@ function sourceCard(title, meta, badge) {
   return `<article class="source-card"><strong>${escapeHtml(title || "Untitled")}</strong><span>${escapeHtml(meta || "")}</span><em>${escapeHtml(badge || "")}</em></article>`;
 }
 
+function environmentCard(report) {
+  const location = report.location?.label || "Current location";
+  return `
+    <article class="environment-card">
+      <strong>${escapeHtml(location)}</strong>
+      <div class="metric-grid">
+        ${metric("Temperature", measurementValue(report.temperature))}
+        ${metric("Rain chance", measurementValue(report.precipitation_probability))}
+        ${metric("Wind", windValue(report.wind))}
+        ${metric("Daylight", daylightValue(report.photoperiod))}
+      </div>
+      <dl class="metric-list">
+        ${metricRow("Humidity", measurementValue(report.humidity))}
+        ${metricRow("Soil moisture", contextValue(report.soil_moisture_context))}
+        ${metricRow("Solar radiation", measurementValue(report.solar_radiation))}
+        ${metricRow("Water context", contextValue(report.water_context))}
+      </dl>
+    </article>
+  `;
+}
+
 function metric(label, value) {
   return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
@@ -698,6 +723,27 @@ function formatMeters(value) {
 function locationToast(location) {
   if (!location) return "No active location selected.";
   return `${locationKindLabel(location.source_kind)} active: ${locationLabel(location)}.`;
+}
+
+function measurementValue(measurement) {
+  if (!measurement || measurement.status !== "available") return "unavailable";
+  return `${measurement.value}${measurement.unit ? ` ${measurement.unit}` : ""}`;
+}
+
+function windValue(wind) {
+  if (!wind || wind.status !== "available") return "unavailable";
+  if (wind.direction && wind.speed) return `${wind.direction} at ${wind.speed}`;
+  return wind.speed || wind.direction || "unavailable";
+}
+
+function daylightValue(measurement) {
+  const value = measurementValue(measurement);
+  return value === "unavailable" ? value : `${value} daylight`;
+}
+
+function contextValue(context) {
+  if (!context || context.status !== "available") return "unavailable";
+  return context.map_unit || context.summary || context.semantic_note || "available";
 }
 
 function toast(message) {

@@ -10,6 +10,7 @@ from packages.context import ContextCompiler
 from packages.cost import CostFirewall
 from packages.domain import Location, Membership, Organization, User, Workspace
 from packages.environment.fixture_adapters import (
+    FailingNWSProvider,
     FixtureNASAPowerProvider,
     FixtureNWSProvider,
     FixtureUSDASoilProvider,
@@ -70,7 +71,7 @@ def enabled_provider(provider_id: str, provider_type: ProviderType, *, remote: b
 
 
 class Phase4Fixture:
-    def __init__(self, *, model_provider=None) -> None:
+    def __init__(self, *, model_provider=None, nws=None) -> None:
         self.connection = connect_in_memory()
         initialize_schema(self.connection)
         self.repo = GaiaRepository(self.connection)
@@ -127,7 +128,7 @@ class Phase4Fixture:
         self.terra = TerraService(
             self.repo,
             self.gateway,
-            NWSForecastTool(FixtureNWSProvider()),
+            NWSForecastTool(nws or FixtureNWSProvider()),
             NASAPowerClimateTool(FixtureNASAPowerProvider()),
             USDASoilSurveyTool(FixtureUSDASoilProvider()),
             USGSWaterSitesTool(FixtureUSGSWaterProvider()),
@@ -163,6 +164,16 @@ class Phase4Fixture:
     def guidance_plan_count(self) -> int:
         row = self.connection.execute("SELECT COUNT(*) AS count FROM guidance_plans").fetchone()
         return int(row["count"])
+
+    def source_providers(self, source_record_ids: list[str]) -> set[str]:
+        if not source_record_ids:
+            return set()
+        placeholders = ",".join("?" for _ in source_record_ids)
+        rows = self.connection.execute(
+            f"SELECT provider FROM source_records WHERE organization_id = ? AND id IN ({placeholders})",
+            (self.org.id, *source_record_ids),
+        ).fetchall()
+        return {row["provider"] for row in rows}
 
     def close(self) -> None:
         self.connection.close()
@@ -206,6 +217,85 @@ class ModelGatewayOrchestratorTest(unittest.TestCase):
         self.assertEqual(result["context_bundle"]["model_run_count"], 0)
         self.assertEqual(self.fixture.model_run_count(), 0)
         self.assertEqual(self.fixture.ledger.estimated_external_spend(), 0.0)
+
+    def test_growing_conditions_query_routes_to_environment_without_model(self) -> None:
+        result = run(
+            post_chat(
+                self.fixture.orchestrator,
+                self.fixture.context(),
+                message="What are the growing conditions here today?",
+                location_id=self.fixture.location.id,
+            )
+        )
+
+        self.assertEqual(result["route"], "environment")
+        self.assertEqual(result["model_run_count"], 0)
+        self.assertEqual(result["context_bundle"]["model_run_count"], 0)
+        self.assertEqual(self.fixture.model_run_count(), 0)
+        self.assertEqual(self.fixture.guidance_plan_count(), 0)
+        self.assertNotIn("Growing Conditions: None", result["content"])
+        self.assertNotIn("None", result["content"])
+
+    def test_weather_like_for_garden_query_routes_to_environment(self) -> None:
+        result = run(
+            post_chat(
+                self.fixture.orchestrator,
+                self.fixture.context(),
+                message="What's the weather like for my garden?",
+                location_id=self.fixture.location.id,
+            )
+        )
+
+        self.assertEqual(result["route"], "environment")
+        self.assertEqual(result["model_run_count"], 0)
+
+    def test_environment_response_renders_measured_fields_and_provenance(self) -> None:
+        result = run(
+            post_chat(
+                self.fixture.orchestrator,
+                self.fixture.context(),
+                message="What are the growing conditions here today?",
+                location_id=self.fixture.location.id,
+            )
+        )
+        report = result["structured_response"]
+        snapshot = result["context_bundle"]["environmental_snapshot"]
+        source_providers = self.fixture.source_providers(result["source_record_ids"])
+
+        self.assertEqual(report["type"], "environment_report")
+        self.assertEqual(report["temperature"]["value"], snapshot["temperature"]["value"])
+        self.assertEqual(report["precipitation_probability"]["value"], snapshot["precipitation"]["value"])
+        self.assertEqual(report["wind"]["speed"], snapshot["wind"]["speed"])
+        self.assertAlmostEqual(report["photoperiod"]["value"], snapshot["photoperiod"]["value"], places=1)
+        self.assertEqual(report["humidity"]["status"], "unavailable")
+        self.assertIn("Temperature:", result["content"])
+        self.assertIn("Rain chance:", result["content"])
+        self.assertIn("Wind:", result["content"])
+        self.assertIn("Day length:", result["content"])
+        self.assertIn("Humidity: unavailable", result["content"])
+        self.assertIn("nws", source_providers)
+        self.assertIn("nasa-power", source_providers)
+
+    def test_partial_environment_data_still_produces_useful_response(self) -> None:
+        fixture = Phase4Fixture(nws=FailingNWSProvider())
+        try:
+            result = run(
+                post_chat(
+                    fixture.orchestrator,
+                    fixture.context(),
+                    message="What are the growing conditions here today?",
+                    location_id=fixture.location.id,
+                )
+            )
+
+            self.assertEqual(result["route"], "environment")
+            self.assertEqual(result["model_run_count"], 0)
+            self.assertIn("Current growing conditions", result["content"])
+            self.assertIn("Temperature:", result["content"])
+            self.assertNotIn("None", result["content"])
+            self.assertEqual(result["provider_diagnostics"]["terra"]["nasa_power"], "AVAILABLE")
+        finally:
+            fixture.close()
 
     def test_reasoning_uses_context_local_model_and_persists_guidance_plan(self) -> None:
         result = run(

@@ -211,6 +211,26 @@ class AtlasTerraContextTest(unittest.TestCase):
         finally:
             fixture.close()
 
+    def test_soil_and_water_denied_do_not_fail_weather_climate_snapshot(self) -> None:
+        self.fixture.registry.get("usda-nrcs-sda").enabled = False
+        self.fixture.registry.get("usgs-water").enabled = False
+
+        result = run(self.fixture.terra.build_environmental_snapshot(self.fixture.location, self.fixture.context()))
+        source_providers = self.fixture.connection.execute(
+            "SELECT DISTINCT provider FROM source_records WHERE organization_id = ?",
+            (self.fixture.org.id,),
+        ).fetchall()
+
+        self.assertEqual(result.snapshot.provider_statuses["nws"], "AVAILABLE")
+        self.assertEqual(result.snapshot.provider_statuses["nasa_power"], "AVAILABLE")
+        self.assertEqual(result.snapshot.provider_statuses["soil"], "DENIED")
+        self.assertEqual(result.snapshot.provider_statuses["water"], "DENIED")
+        self.assertTrue(result.snapshot.temperature)
+        self.assertTrue(result.snapshot.solar_radiation)
+        self.assertGreaterEqual(len(result.snapshot.source_record_ids), 2)
+        self.assertIn("nws", {row["provider"] for row in source_providers})
+        self.assertIn("nasa-power", {row["provider"] for row in source_providers})
+
     def test_soil_survey_semantics_are_not_live_soil_moisture(self) -> None:
         result = run(self.fixture.terra.build_environmental_snapshot(self.fixture.location, self.fixture.context()))
 
@@ -305,6 +325,11 @@ class AtlasTerraContextTest(unittest.TestCase):
         self.assertIn("environmental_snapshot", environment)
         self.assertEqual(environment["model_run_count"], 0)
         self.assertNotIn("raw", environment["environmental_snapshot"])
+        self.assertIn("humidity", environment["environmental_snapshot"])
+        self.assertIn("precipitation", environment["environmental_snapshot"])
+        self.assertIn("wind", environment["environmental_snapshot"])
+        self.assertIn("valid_at", environment["environmental_snapshot"])
+        self.assertIn("retrieved_at", environment["environmental_snapshot"])
 
 
 if __name__ == "__main__":

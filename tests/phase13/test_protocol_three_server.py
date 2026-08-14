@@ -101,9 +101,12 @@ class ProtocolThreeServerTest(unittest.TestCase):
                 self.assertIn("/api/v1/chat/stream", javascript)
                 self.assertIn("/api/v1/seed/demo", javascript)
                 self.assertIn("source_kind: \"device\"", javascript)
+                self.assertIn("environmentCard", javascript)
+                self.assertIn("environment_report", javascript)
                 self.assertIn("automatic_paid_usage_enabled", javascript)
                 self.assertIn(".app-shell", stylesheet)
                 self.assertIn(".location-status", stylesheet)
+                self.assertIn(".environment-card", stylesheet)
                 self.assertNotIn("Core chat and context diagnostics", html)
                 self.assertNotIn("static demo", javascript.lower())
             finally:
