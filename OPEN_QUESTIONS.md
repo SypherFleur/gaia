@@ -34,7 +34,7 @@ Resolved by D047 and D048 for current development: use existing lightweight Olla
 
 Future minimum supported hardware remains a product/deployment question, but it does not block Commit 2.
 
-## Q5. Existing Cillian/GreensWrld Schemas
+## Q5. Existing SylionX/GreensWrld Schemas
 
 Resolved by D035 and D036: GAIA's canonical core schema is standalone and must not depend on GreensWrld. Future integration uses an adapter/mapping layer.
 

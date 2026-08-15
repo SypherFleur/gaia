@@ -8,7 +8,7 @@ This file records resolved architectural decisions from Protocol Two and the ini
 
 ## D002. New Repository
 
-No existing GAIA/Cillian/GreensWrld repository was present in the inspected workspace. A new GAIA monorepo was initialized at `C:\Users\Jason\Documents\Codex\2026-08-10\sites-plugin-sites-openai-bundled-create\gaia`.
+No existing GAIA/SylionX/GreensWrld repository was present in the inspected workspace. A new GAIA monorepo was initialized at `C:\Users\Jason\Documents\Codex\2026-08-10\sites-plugin-sites-openai-bundled-create\gaia`.
 
 ## D003. Modular Monolith
 
@@ -96,7 +96,7 @@ Do not build a custom password system if a trusted zero/low-cost provider is ava
 
 ## D024. Sovereign Egress Control
 
-Institutional and sovereign deployments must support local model/database/object storage and no protected content sent to Cillian or remote model providers unless policy explicitly permits it.
+Institutional and sovereign deployments must support local model/database/object storage and no protected content sent to SylionX or remote model providers unless policy explicitly permits it.
 
 ## D025. Community Knowledge Separate
 
@@ -140,7 +140,7 @@ Implementation follows Protocol Two: constitution and scaffolding first, then do
 
 ## D035. GAIA Canonical Domain Is Standalone
 
-GAIA is a standalone canonical intelligence platform. Its core schema will not depend on GreensWrld or any existing Cillian application schema. Future GreensWrld integration must use an adapter/mapping layer: `GreensWrld -> GAIA Integration Adapter -> GAIA Canonical Domain`.
+GAIA is a standalone canonical intelligence platform. Its core schema will not depend on GreensWrld or any existing SylionX application schema. Future GreensWrld integration must use an adapter/mapping layer: `GreensWrld -> GAIA Integration Adapter -> GAIA Canonical Domain`.
 
 ## D036. Future GreensWrld Mapping
 
@@ -176,7 +176,7 @@ Raw conversations, private documents, exact farm coordinates, images, and instit
 
 ## D044. Institution and Sovereign Telemetry Control
 
-GAIA Institution and GAIA Sovereign must eventually support full telemetry disablement, local-only operation, and administrator configuration. Private institutional data may not be silently transmitted to Cillian Industries.
+GAIA Institution and GAIA Sovereign must eventually support full telemetry disablement, local-only operation, and administrator configuration. Private institutional data may not be silently transmitted to SylionX.
 
 ## D045. Location Privacy Default
 

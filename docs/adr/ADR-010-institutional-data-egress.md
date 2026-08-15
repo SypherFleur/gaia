@@ -8,7 +8,7 @@ Universities, governments, and sovereign deployments may have protected data, re
 
 ## Decision
 
-Institutional and sovereign deployments must support local database, local object storage, local/private model runtime, configurable telemetry, audit export, and policy-controlled network egress. Protected content must not be sent to Cillian or remote model providers unless explicitly permitted by deployment policy.
+Institutional and sovereign deployments must support local database, local object storage, local/private model runtime, configurable telemetry, audit export, and policy-controlled network egress. Protected content must not be sent to SylionX or remote model providers unless explicitly permitted by deployment policy.
 
 ## Consequences
 

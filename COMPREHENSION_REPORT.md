@@ -86,11 +86,11 @@ Institutional/research use requires exportable `ProvenanceBundle` records contai
 
 GAIA Local is for development, testing, demos, and private use. It should run with Docker Compose, local database, local object storage, local model endpoint, and no paid APIs.
 
-GAIA Public is for growers and eventual public alpha. It is multi-tenant, Cillian-managed, hard-rate-limited, free-tier-first, and optionally uses hosted inference only behind the Cost Firewall.
+GAIA Public is for growers and eventual public alpha. It is multi-tenant, SylionX-managed, hard-rate-limited, free-tier-first, and optionally uses hosted inference only behind the Cost Firewall.
 
 GAIA Institution is for universities, extension programs, research teams, NGOs, and enterprise agriculture. It needs organization workspaces, researcher roles, datasets, shared knowledge bases, reproducibility, retention controls, exports, and institution-specific tools/sources.
 
-GAIA Sovereign is for governments and regulated organizations. It must support self-hosted or customer-controlled cloud deployment, customer-controlled keys later, private model runtime, local/vector databases, no protected content sent to Cillian, configurable telemetry, audit export, and jurisdiction pack deployment. No compliance certification should be claimed until actually achieved.
+GAIA Sovereign is for governments and regulated organizations. It must support self-hosted or customer-controlled cloud deployment, customer-controlled keys later, private model runtime, local/vector databases, no protected content sent to SylionX, configurable telemetry, audit export, and jurisdiction pack deployment. No compliance certification should be claimed until actually achieved.
 
 ## 8. Jurisdiction Packs
 
@@ -188,11 +188,11 @@ Contradictions or mismatches:
 Missing prerequisites:
 
 - First alpha domain/subdomain.
-- Authentication provider or identity constraints used by Cillian Industries.
+- Authentication provider or identity constraints used by SylionX.
 - Google OAuth client credentials and redirect origin, when Calendar is implemented.
 - Optional provider API keys: USDA NASS, USDA AMS, Pl@ntNet, and future hosted model providers. These must remain optional and disabled by default.
 - Docker Desktop service/engine availability.
-- Any existing Cillian/GreensWrld schemas, brand components, or legal data-sharing constraints outside this workspace.
+- Any existing SylionX/GreensWrld schemas, brand components, or legal data-sharing constraints outside this workspace.
 
 Security concerns:
 

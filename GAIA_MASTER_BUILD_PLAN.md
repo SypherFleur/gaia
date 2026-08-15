@@ -4,7 +4,7 @@
 >
 > Project: **GAIA — Agricultural Intelligence & Guidance System**
 >
-> Company: **Cillian Industries**
+> Company: **SylionX (formerly Sylion Industries)**
 >
 > Status: **Architecture-approved draft for Codex interrogation before implementation**
 >
@@ -60,7 +60,7 @@ Codex should be able to explain, in its own words:
 - how model providers can be swapped,
 - how an image diagnosis differs from a deterministic data lookup,
 - how a university tenant differs from a public grower tenant,
-- how a sovereign deployment can run without Cillian Industries receiving its protected data,
+- how a sovereign deployment can run without SylionX receiving its protected data,
 - what happens when a free API quota is exhausted,
 - which features are intentionally deferred.
 
@@ -281,7 +281,7 @@ Purpose:
 
 Characteristics:
 - multi-tenant,
-- Cillian-managed infrastructure,
+- SylionX-managed infrastructure,
 - hard rate limits,
 - free-tier-first infrastructure,
 - optional hosted inference constrained by Cost Firewall.
@@ -317,7 +317,7 @@ Characteristics:
 - customer-controlled keys,
 - private model runtime,
 - local/vector databases,
-- no requirement to send protected content to Cillian,
+- no requirement to send protected content to SylionX,
 - configurable telemetry,
 - audit export,
 - jurisdiction pack deployment.
@@ -3099,19 +3099,19 @@ It is done when:
 Codex must verify these with the project owner if not already known from the repository/environment:
 
 1. What hardware is available locally? CPU, RAM, GPU model, VRAM, OS.
-2. Is this a new repository or an existing Cillian/GreensWrld repository?
+2. Is this a new repository or an existing SylionX/GreensWrld repository?
 3. What domain/subdomain will be used for the first alpha?
 4. Is the first alpha private, invite-only, or public?
-5. Which authentication provider, if any, is already used by Cillian Industries?
+5. Which authentication provider, if any, is already used by SylionX?
 6. Is Texas the initial live jurisdiction pack?
 7. Should Florida be the second U.S. jurisdiction pack because of FAMU goals?
 8. Should Singapore be the first non-U.S. jurisdiction pack?
-9. Which existing Cillian brand tokens/components may GAIA reuse?
+9. Which existing SylionX brand tokens/components may GAIA reuse?
 10. What exact hardware must local multimodal inference support?
 11. Is Google Calendar required in the first public alpha or immediately after?
 12. What user data from GreensWrld is legally/technically available to import?
 13. Are there existing plant/outcome schemas that GAIA must preserve?
-14. What telemetry may Cillian collect from institutional deployments?
+14. What telemetry may SylionX collect from institutional deployments?
 15. What deletion/retention expectation should personal users receive?
 16. Are minors/students expected to use university deployments?
 17. Should voice/audio be exposed in v0 or only supported by the backend schema?

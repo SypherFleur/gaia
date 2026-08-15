@@ -1,6 +1,6 @@
 # GAIA
 
-GAIA is a multimodal agricultural intelligence and guidance system for Cillian Industries.
+GAIA is a multimodal agricultural intelligence and guidance system for SylionX (formerly Sylion Industries).
 
 The governing specification is `GAIA_MASTER_BUILD_PLAN.md`. The primary product object is `GuidancePlan`, not a chat transcript.
 
@@ -80,7 +80,7 @@ Docker is installed on the inspected machine, but Docker Desktop was not running
 
 ## Phase 1 Domain Boundary
 
-GAIA's core domain is standalone. GreensWrld or other Cillian application schemas integrate later through adapters and mappings.
+GAIA's core domain is standalone. GreensWrld or other SylionX application schemas integrate later through adapters and mappings.
 
 Authentication is provider-neutral. Local development may use deterministic development identities for tests, but development authentication is not production authentication. Authorization and tenancy remain GAIA-owned.
 
