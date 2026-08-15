@@ -242,6 +242,141 @@ class USDASoilDataAccessAdapter:
         )
 
 
+class USGSWaterApiAdapter:
+    """Nearby hydrologic sites and current readings from USGS Water Services.
+
+    Free and keyless. Streamflow and gage height are watershed context, never a
+    field-level soil-moisture or irrigation measurement.
+    """
+
+    provider_id = "usgs-water"
+
+    # 00060 discharge (cfs), 00065 gage height (ft), 00010 water temperature (C).
+    DEFAULT_PARAMETERS = "00060,00065,00010"
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://waterservices.usgs.gov/nwis",
+        user_agent: str = "GAIA Local Alpha/0.1",
+        search_radius_degrees: float = 0.25,
+        timeout_seconds: float = 15.0,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.user_agent = user_agent
+        self.search_radius_degrees = search_radius_degrees
+        self.timeout_seconds = timeout_seconds
+
+    async def nearby_sites(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        return await asyncio.to_thread(self._fetch, latitude, longitude, "sites")
+
+    async def current_conditions(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        return await asyncio.to_thread(self._fetch, latitude, longitude, "current")
+
+    async def historical_conditions(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        # Daily-values retrieval is a separate NWIS service; not wired yet, and
+        # an empty success would read as "no water history exists".
+        return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["usgs_historical_daily_values_not_implemented"])
+
+    def _fetch(self, latitude: float, longitude: float, mode: str) -> EnvironmentalProviderResult:
+        url = self.request_url(latitude, longitude)
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": self.user_agent})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            # NWIS answers 404 when the bounding box contains no active sites.
+            if exc.code == 404:
+                return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["usgs_no_sites_in_search_area"])
+            return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"usgs_http_{exc.code}"])
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"usgs_error:{exc.__class__.__name__}"])
+        return self.normalize_instantaneous_response(payload, url, mode=mode)
+
+    def request_url(self, latitude: float, longitude: float) -> str:
+        # Coordinates become a bounding box rounded to ~1 km, so an exact
+        # private location never reaches USGS.
+        latitude = round(latitude, 2)
+        longitude = round(longitude, 2)
+        radius = self.search_radius_degrees
+        bbox = f"{longitude - radius:.2f},{latitude - radius:.2f},{longitude + radius:.2f},{latitude + radius:.2f}"
+        params = urllib.parse.urlencode(
+            {"format": "json", "bBox": bbox, "parameterCd": self.DEFAULT_PARAMETERS, "siteStatus": "active"}
+        )
+        return f"{self.base_url}/iv/?{params}"
+
+    def normalize_instantaneous_response(self, payload: dict, url: str | None = None, *, mode: str = "sites") -> EnvironmentalProviderResult:
+        series = ((payload.get("value") or {}).get("timeSeries")) or []
+        sites: dict[str, dict] = {}
+        for entry in series:
+            source_info = entry.get("sourceInfo") or {}
+            site_code = _first_site_code(source_info)
+            if not site_code:
+                continue
+            site = sites.setdefault(
+                site_code,
+                {"site_no": site_code, "name": source_info.get("siteName"), "measurements": {}},
+            )
+            reading = _latest_reading(entry)
+            if reading is not None:
+                variable = entry.get("variable") or {}
+                name = str((variable.get("variableCode") or [{}])[0].get("value") or "unknown")
+                site["measurements"][_PARAMETER_LABELS.get(name, name)] = reading
+        ordered = [site for site in sites.values() if site["measurements"] or mode == "sites"]
+        if not ordered:
+            return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["usgs_no_sites_in_search_area"])
+        data = {
+            "sites": ordered,
+            "evidence_type": "OBSERVED",
+            "semantic_note": "USGS streamflow and gage readings are watershed context, not field soil moisture or irrigation guidance.",
+        }
+        return EnvironmentalProviderResult(
+            status="AVAILABLE",
+            data=data,
+            provenance=[
+                ProvenanceRecord(
+                    provider=self.provider_id,
+                    external_record_id=ordered[0]["site_no"],
+                    canonical_url=url or f"{self.base_url}/iv/",
+                    authority="U.S. Geological Survey Water Services",
+                    geographic_scope="nearby hydrologic sites",
+                    license="public domain (U.S. federal government work)",
+                    attribution="USGS",
+                    content_hash=content_hash(payload),
+                )
+            ],
+        )
+
+
+_PARAMETER_LABELS = {
+    "00060": "discharge_cfs",
+    "00065": "gage_height_ft",
+    "00010": "water_temperature_c",
+}
+
+
+def _first_site_code(source_info: dict) -> str | None:
+    codes = source_info.get("siteCode") or []
+    if not codes:
+        return None
+    value = codes[0].get("value")
+    return str(value) if value else None
+
+
+def _latest_reading(entry: dict) -> dict | None:
+    values = entry.get("values") or []
+    points = values[0].get("value") if values else None
+    if not points:
+        return None
+    latest = points[-1]
+    number = _sda_number(latest.get("value"))
+    # NWIS encodes "no current reading" as -999999.
+    if number is None or number <= -999999:
+        return None
+    unit = ((entry.get("variable") or {}).get("unit") or {}).get("unitCode")
+    return {"value": number, "unit": unit, "observed_at": latest.get("dateTime"), "evidence_type": "OBSERVED"}
+
+
 def _sda_rows(payload: dict) -> list[dict]:
     """Normalize SDA's Table shape into dicts.
 

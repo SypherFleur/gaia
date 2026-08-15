@@ -329,13 +329,20 @@ class KnowledgeService:
             raise PermissionError("KnowledgeCollection is not accessible from this workspace")
         if collection.get("visibility") == "PROJECT" and collection.get("research_project_id") != project_id:
             raise PermissionError("project_collection_access_denied")
-        query_terms = {term.lower() for term in query.split()}
-        matches = []
-        for document in self.repository.list_knowledge_documents(context.organization_id, collection_id):
-            score = sum(1 for term in query_terms if term and term in document["body"].lower())
-            if score:
-                matches.append({"document_id": document["id"], "title": document["title"], "score": score, "visibility": collection["visibility"], "sensitivity": document["sensitivity"]})
-        return sorted(matches, key=lambda item: item["score"], reverse=True)
+        documents = self.repository.search_knowledge_documents(context.organization_id, collection_id, query)
+        return [
+            {
+                "document_id": document["id"],
+                "title": document["title"],
+                # bm25 returns lower-is-better; expose an increasing relevance
+                # score so callers can sort naturally.
+                "score": round(-float(document["rank_score"]), 6),
+                "retrieval": "fts5_bm25",
+                "visibility": collection["visibility"],
+                "sensitivity": document["sensitivity"],
+            }
+            for document in documents
+        ]
 
 
 def _source_records_for_run(repository: GaiaRepository, organization_id: str, run: JsonDict) -> list[JsonDict]:

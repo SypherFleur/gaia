@@ -45,7 +45,7 @@ from packages.domain import (
 from packages.domain.models import new_id, now_iso
 from packages.environment import TerraService
 from packages.environment.fixture_adapters import FixtureNASAPowerProvider, FixtureNWSProvider, FixtureUSDASoilProvider, FixtureUSGSWaterProvider
-from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter, USDASoilDataAccessAdapter
+from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter, USDASoilDataAccessAdapter, USGSWaterApiAdapter
 from packages.environment.providers import DisabledClimateProvider, DisabledSoilSurveyProvider, DisabledWaterProvider, DisabledWeatherProvider
 from packages.environment.tools import NASAPowerClimateTool, NWSForecastTool, USDASoilSurveyTool, USGSWaterSitesTool
 from packages.geospatial import AtlasService, CensusGeocoderAdapter, CensusGeographyTool
@@ -1343,8 +1343,8 @@ def _normal_provider_defaults() -> dict[str, ProviderMode]:
         "atlas_geography": "live",
         "nws": "live",
         "nasa_power": "live",
-        "usda_soil": "disabled",
-        "usgs_water": "disabled",
+        "usda_soil": "live",
+        "usgs_water": "live",
         "gbif": "live",
         "kew_powo": "disabled",
         "genesys_pgr": "disabled",
@@ -1394,6 +1394,8 @@ def _soil_provider(modes: AlphaProviderModes):
 
 
 def _water_provider(modes: AlphaProviderModes):
+    if modes.usgs_water == "live":
+        return USGSWaterApiAdapter(user_agent=os.environ.get("USGS_USER_AGENT") or "GAIA Local Alpha/0.1")
     if modes.usgs_water == "fixture":
         return FixtureUSGSWaterProvider()
     return DisabledWaterProvider()

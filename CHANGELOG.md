@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replaced institutional knowledge search with real ranked retrieval: SQLite FTS5/BM25 with porter stemming (`migrations/0015_knowledge_fts.sql`, `search_knowledge_documents`), tenant- and collection-scoped through a join against `knowledge_documents`, with user-supplied FTS operators quoted so they match literally. The checksum `FixtureEmbeddingProvider` is no longer on the retrieval path.
+- Added a live USGS Water Services adapter (`GAIA_USGS_WATER_MODE=live`): nearby-site and current-reading retrieval normalized to the water contract, discarding NWIS `-999999` no-data sentinels, searching a ~1 km-rounded bounding box so exact coordinates never egress, and returning explicit `UNAVAILABLE` for unimplemented historical daily values.
+- Defaulted SSURGO soil and USGS Water to live for file-backed runtimes now that both have real, keyless adapters.
+
 - Made the command surface cross-platform: `npm test`/`make test` and the other scripts now resolve a Python interpreter per platform (`scripts/bootstrap/python_launcher.js`, `PYTHON`/`GAIA_PYTHON` overrides) instead of requiring the Windows-only `py -3.13` launcher.
 - Stopped API 500 responses from echoing exception details; clients receive an opaque `error_reference` and the type, message, and traceback are logged server-side only.
 - Made the missing-`tzdata` timezone fallback DST-aware for U.S. zones instead of a fixed offset that was an hour wrong for roughly half the year; unknown zones now report `UTC (unresolved <zone>)` rather than silently substituting UTC.

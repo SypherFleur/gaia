@@ -160,6 +160,14 @@ Suite after this tier: **396 tests, 0 failures, 8 opt-in skips**. This closes ev
 - **S3-4 fixed.** The `tzdata`-missing fallback is now DST-aware (`_FallbackUSTimezone`, post-2007 U.S. rule) for the U.S. zones GAIA plans in, instead of a fixed offset that was an hour wrong for half the year. Non-DST zones (Phoenix, Honolulu) never shift, and an unknown zone returns UTC with an explicit `UTC (unresolved <zone>)` label rather than silently pretending the requested zone was honoured.
 - **P-4 fixed.** `migrations/0014_institutional_tenant_indexes.sql` adds 22 indexes over the Phase 11–13 tenant-scoped tables — `(organization_id, created_at/started_at)` for every list query, plus parent-key indexes for suite/collection/dataset lookups. Verified applied and used (`EXPLAIN QUERY PLAN` selects `idx_knowledge_documents_org`).
 
+### Fourth remediation tier — 2026-08-15
+
+Suite after this tier: **407 tests, 0 failures, 8 opt-in skips**. Every free-provider real-data item on the §5.3 ladder is now built.
+
+- **S2-3 fixed.** Institutional knowledge retrieval is real ranked search: `migrations/0015_knowledge_fts.sql` adds an FTS5 index (porter/unicode61), `GaiaRepository.search_knowledge_documents` runs a BM25-ranked MATCH joined back to `knowledge_documents` so tenant, collection, and soft-delete filters are enforced against the real table rather than the index, and `KnowledgeService.search` returns `retrieval: "fts5_bm25"` with an increasing relevance score. User text is tokenized and each term quoted, so FTS operators typed by a user (`NOT`, `*`, a bare quote) match literally instead of steering or erroring on the query. Stemming now matches "watering" from "water", which substring counting never could. The checksum `FixtureEmbeddingProvider` remains for ingest-time chunk metadata but is off the retrieval path — this is lexical retrieval, not vector-semantic, and the harness says so.
+- **USGS Water implemented.** `USGSWaterApiAdapter` queries the free, keyless NWIS instantaneous-values service for nearby sites and current readings (discharge, gage height, water temperature), normalized to the water contract. NWIS `-999999` no-data sentinels are dropped rather than reported as readings, the search uses a bounding box built from ~1 km-rounded coordinates, an empty box returns `UNAVAILABLE`, and historical daily values return an explicit `usgs_historical_daily_values_not_implemented` rather than an empty success that would read as "no water history exists". Mode: `GAIA_USGS_WATER_MODE`.
+- **SSURGO and USGS Water now default to live** for file-backed runtimes, joining the Census geocoder, NWS, NASA POWER, GBIF, and Europe PMC. All seven are free and keyless.
+
 ## 8. Verification notes
 
 - All findings cite file:line and were made by reading source, not inferring from names or docs.

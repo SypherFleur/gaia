@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
@@ -95,6 +96,16 @@ def _row_to_dict(row: sqlite3.Row | None) -> JsonDict | None:
     if row is None:
         return None
     return dict(row)
+
+
+def _fts_match_query(query: str) -> str:
+    """Build an FTS5 MATCH expression from untrusted user text.
+
+    Every term is quoted, so FTS operators a user types ("NOT", "*", column
+    filters) are matched literally instead of steering the query.
+    """
+    terms = [term for term in re.split(r"\W+", query or "") if term]
+    return " OR ".join(f'"{term}"' for term in terms)
 
 
 def _decode_json_fields(record: JsonDict, fields: Iterable[str]) -> JsonDict:
@@ -907,7 +918,51 @@ class GaiaRepository:
         for key in ["chunks", "retention_policy"]:
             values[key] = _json(values[key])
         self._insert_from_dict("knowledge_documents", values)
+        self.connection.execute(
+            """
+            INSERT INTO knowledge_documents_fts (document_id, organization_id, collection_id, title, body)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (document.id, document.organization_id, document.collection_id, document.title, document.body),
+        )
+        self.connection.commit()
         return document
+
+    def search_knowledge_documents(self, organization_id: str, collection_id: str, query: str, *, limit: int = 20) -> list[JsonDict]:
+        """Ranked FTS5 retrieval, scoped to one tenant and collection.
+
+        Joins back to knowledge_documents so soft-deleted rows drop out and the
+        tenant filter is enforced against the real table, not just the index.
+        """
+        self._require_knowledge_collection(organization_id, collection_id)
+        match = _fts_match_query(query)
+        if not match:
+            return []
+        try:
+            rows = self.connection.execute(
+                """
+                SELECT d.*, bm25(knowledge_documents_fts) AS rank_score
+                FROM knowledge_documents_fts
+                JOIN knowledge_documents d
+                  ON d.id = knowledge_documents_fts.document_id
+                 AND d.organization_id = ?
+                 AND d.collection_id = ?
+                 AND d.deleted_at IS NULL
+                WHERE knowledge_documents_fts MATCH ?
+                ORDER BY rank_score
+                LIMIT ?
+                """,
+                (organization_id, collection_id, match, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # Malformed FTS expression from user input is a no-match, not a 500.
+            return []
+        records = []
+        for row in rows:
+            record = _decode_json_fields(dict(row), ["chunks", "retention_policy"])
+            record["untrusted_content"] = bool(record["untrusted_content"])
+            records.append(record)
+        return records
 
     def create_audit_export(self, audit_export: AuditExport) -> AuditExport:
         self._require_membership(audit_export.organization_id, audit_export.generated_by)
