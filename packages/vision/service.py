@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -96,6 +97,7 @@ class VisionService:
             environmental_snapshot_id = bundle.environmental_snapshot.id if bundle.environmental_snapshot else None
 
         digest = str(media.get("metadata", {}).get("content_hash") or _image_digest(image_base64))
+        request_digest = _request_digest(prompt=prompt, botanist_context=botanist_context, environmental_context=environmental_context)
         tool_result = await self.tool_gateway.execute(
             tool,
             context,
@@ -108,7 +110,7 @@ class VisionService:
                     "environmental_context": environmental_context,
                     "metadata": {"media_attachment_id": media_attachment_id, "image_hash": digest},
                 },
-                cache_key=f"vision:{tool.provider_id}:{digest}",
+                cache_key=f"vision:{tool.provider_id}:{digest}:{request_digest}",
                 cache_ttl_seconds=86400,
                 stale_if_error_seconds=86400 * 7,
                 allow_stale_cache=True,
@@ -231,4 +233,14 @@ def _hypothesis_payload(item: JsonDict, source_record_ids: list[str]) -> JsonDic
 
 def _image_digest(image_base64: str) -> str:
     return hashlib.sha256(image_base64.encode("utf-8")).hexdigest()
+
+
+def _request_digest(*, prompt: str, botanist_context: JsonDict, environmental_context: JsonDict) -> str:
+    serialized = json.dumps(
+        {"prompt": prompt, "user_plant_context": botanist_context, "environmental_context": environmental_context},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 

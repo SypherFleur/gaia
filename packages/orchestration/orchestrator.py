@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Literal
 
 from packages.context import ContextBundle, ContextCompiler
@@ -385,15 +387,18 @@ class GaiaOrchestrator:
         if location_id is None:
             return self._location_required(context, conversation_id, user_message_id, "season")
         crops = _extract_crops(message)
+        location = self.repository.get_location(context.organization_id, location_id) or {}
+        today = date.today()
+        start_date, end_date = derive_season_window(message, today)
         request = SeasonPlanRequest(
             workspace_id=context.workspace_id,
             location_id=location_id,
             objective=message,
             crop_names=crops,
-            start_date="2026-09-15",
-            end_date="2026-12-15",
-            constraints={"planning_date": "2026-08-11"},
-            timezone="America/Chicago",
+            start_date=start_date,
+            end_date=end_date,
+            constraints={"planning_date": today.isoformat()},
+            timezone=str(location.get("timezone") or "UTC"),
         )
         season_context = await self.season_context_provider.build(context, request, include_mercator=_asks_for_economics(message))
         plan, actions, model_run_ids = await self.season.create_plan(context, request, season_context)
@@ -522,6 +527,65 @@ class GaiaOrchestrator:
                 user_plant_id=user_plant_id,
             )
         )
+
+
+# Northern-hemisphere meteorological season starts. Sentinel jurisdiction is
+# U.S.-only, so a southern-hemisphere mapping is deferred until non-U.S. support.
+_SEASON_START_MONTHS = {"spring": 3, "summer": 6, "fall": 9, "autumn": 9, "winter": 12}
+
+# "may" is excluded: as a modal verb it appears in ordinary questions far too
+# often to be a reliable month signal.
+_MONTH_NUMBERS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+
+
+def derive_season_window(message: str, today: date) -> tuple[str, str]:
+    """Derive a deterministic planning window from the user's message.
+
+    A named season or month yields its next occurrence (a roughly three-month
+    window, truncated to start no earlier than today). Without a hint the
+    window is today through today + 90 days.
+    """
+    text = message.lower()
+    candidates: list[tuple[date, date]] = []
+    for name, start_month in _SEASON_START_MONTHS.items():
+        if re.search(rf"\b{name}\b", text):
+            candidates.append(_window_from_month(start_month, today))
+    for name, month in _MONTH_NUMBERS.items():
+        if re.search(rf"\b{name}\b", text):
+            candidates.append(_window_from_month(month, today))
+    if not candidates:
+        return today.isoformat(), (today + timedelta(days=90)).isoformat()
+    start, end = min(candidates, key=lambda pair: pair[0])
+    return start.isoformat(), end.isoformat()
+
+
+def _window_from_month(start_month: int, today: date) -> tuple[date, date]:
+    # A window that began late last year (winter) can still be in progress,
+    # so the previous year's occurrence is considered first.
+    for year in (today.year - 1, today.year, today.year + 1):
+        start = date(year, start_month, 1)
+        end = _end_of_three_month_window(start)
+        if end >= today:
+            return max(start, today), end
+    raise AssertionError("unreachable: next year's window always ends after today")
+
+
+def _end_of_three_month_window(start: date) -> date:
+    year = start.year + (start.month + 2) // 12
+    month = (start.month + 2) % 12 + 1
+    return date(year, month, 1) - timedelta(days=1)
 
 
 def classify_route(message: str) -> RouteDecision:

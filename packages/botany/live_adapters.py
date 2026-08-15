@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import urllib.error
 import urllib.parse
@@ -77,6 +78,64 @@ class GBIFApiAdapter:
 
 class GenesysPGRAdapter:
     provider_id = "genesys-pgr"
+
+    def __init__(
+        self,
+        *,
+        user_agent: str = "GAIA Local Alpha/0.1",
+        base_url: str = "https://api.genesys-pgr.org",
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        timeout_seconds: float = 15.0,
+    ) -> None:
+        self.user_agent = user_agent
+        self.base_url = base_url.rstrip("/")
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.timeout_seconds = timeout_seconds
+
+    async def search_accessions(self, query: str, *, limit: int = 10) -> GermplasmSearchResult:
+        return await asyncio.to_thread(self._search_sync, query, limit)
+
+    def _search_sync(self, query: str, limit: int) -> GermplasmSearchResult:
+        headers = {"User-Agent": self.user_agent, "Accept": "application/json", "Content-Type": "application/json"}
+        try:
+            token = self._access_token()
+            if token is not None:
+                headers["Authorization"] = f"Bearer {token}"
+            url = f"{self.base_url}/api/v1/acn/search?l={int(limit)}"
+            body = json.dumps({"_text": query}).encode("utf-8")
+            request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            warnings = [f"genesys_http_{exc.code}"]
+            if exc.code in {401, 403} and not (self.client_id and self.client_secret):
+                warnings.append("genesys_credentials_not_configured")
+            return GermplasmSearchResult(status="PROVIDER_ERROR", query=query, warnings=warnings)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            return GermplasmSearchResult(status="PROVIDER_ERROR", query=query, warnings=[f"genesys_error:{exc.__class__.__name__}"])
+        return self.normalize_accession_search(query, payload)
+
+    def _access_token(self) -> str | None:
+        if not (self.client_id and self.client_secret):
+            return None
+        credentials = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("ascii")
+        request = urllib.request.Request(
+            f"{self.base_url}/oauth/token",
+            data=urllib.parse.urlencode({"grant_type": "client_credentials"}).encode("utf-8"),
+            headers={
+                "User-Agent": self.user_agent,
+                "Accept": "application/json",
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        token = payload.get("access_token")
+        return str(token) if token else None
 
     def normalize_accession_search(self, query: str, payload: dict) -> GermplasmSearchResult:
         rows = payload.get("content") or payload.get("results") or payload.get("accessions") or []

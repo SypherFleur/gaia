@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import mimetypes
+import threading
 from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -49,108 +50,126 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
 
     server_version = "GAIAAlphaHTTP/0.1"
 
+    # ThreadingHTTPServer spawns a thread per request, but the runtime holds a
+    # single sqlite3.Connection shared by every repository/gateway. sqlite3 does
+    # not support interleaved use of one connection across threads, so requests
+    # are serialized. Static assets are served outside the lock.
+    runtime_lock = threading.RLock()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query)
-        try:
-            if path == "/api/v1/status":
-                self._json(runtime_status(self.runtime, host=self.host_name, port=self.port_number))
-            elif path == "/api/v1/system":
-                self._json(system_payload(self.runtime, self.host_name, self.port_number))
-            elif path == "/api/v1/dev-identity":
-                self._json(dev_identity_payload(self.runtime))
-            elif path == "/api/v1/locations":
-                self._json(locations_payload(self.runtime))
-            elif path == "/api/v1/cost/status":
-                self._json(cost_status(self.runtime))
-            elif path in {"/api/v1/providers", "/api/v1/providers/list"}:
-                self._json(providers_payload(self.runtime))
-            elif path == "/api/v1/providers/health":
-                self._json(provider_health_payload(self.runtime))
-            elif path == "/api/v1/plants":
-                self._json(_run(get_plants(self.runtime.repository, self.runtime.context(request_id="api-plants"))))
-            elif path.startswith("/api/v1/plants/") and path.endswith("/observations"):
-                plant_id = path.split("/")[-2]
-                self._json(_run(get_observations(self.runtime.repository, self.runtime.context(request_id="api-observations"), plant_id)))
-            elif path.startswith("/api/v1/plants/") and path.endswith("/vision"):
-                plant_id = path.split("/")[-2]
-                self._json({"visual_analyses": self.runtime.repository.list_visual_analyses_for_plant(self.runtime.organization_id, plant_id)})
-            elif path.startswith("/api/v1/plants/"):
-                plant_id = path.split("/")[-1]
-                payload = _run(get_plant(self.runtime.repository, self.runtime.context(request_id="api-plant"), plant_id))
-                self._json(payload if payload is not None else {"status": "not_found"}, status=HTTPStatus.OK if payload else HTTPStatus.NOT_FOUND)
-            elif path == "/api/v1/conversations":
-                self._json(get_conversations(self.runtime.repository, self.runtime.context(request_id="api-conversations")))
-            elif path.startswith("/api/v1/conversations/") and path.endswith("/messages"):
-                conversation_id = path.split("/")[-2]
-                self._json(self.runtime.repository.list_messages(self.runtime.organization_id, conversation_id))
-            elif path == "/api/v1/season/plans":
-                self._json({"season_plans": self.runtime.repository.list_season_plans(self.runtime.organization_id, self.runtime.workspace_id)})
-            elif path == "/api/v1/regulations/rules":
-                self._json(_run(get_active_regulations(self.runtime.repository, self.runtime.context(request_id="api-regulations"))))
-            elif path == "/api/v1/regulations/zones":
-                self._json(_run(get_regulation_zones(self.runtime.repository, self.runtime.context(request_id="api-zones"))))
-            elif path == "/api/v1/source-records":
-                ids = ",".join(query.get("ids", [])).split(",") if query.get("ids") else []
-                self._json({"source_records": source_records(self.runtime, [item for item in ids if item])})
-            elif path == "/api/v1/alpha/persistence-check":
-                self._json(persistence_summary(self.runtime))
-            elif path.startswith("/api/"):
-                self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
-            else:
+        if not path.startswith("/api/"):
+            try:
                 self._static(path)
+            except Exception as exc:
+                self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        try:
+            with self.runtime_lock:
+                self._api_get(path, query)
         except Exception as exc:
             self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _api_get(self, path: str, query: dict) -> None:
+        if path == "/api/v1/status":
+            self._json(runtime_status(self.runtime, host=self.host_name, port=self.port_number))
+        elif path == "/api/v1/system":
+            self._json(system_payload(self.runtime, self.host_name, self.port_number))
+        elif path == "/api/v1/dev-identity":
+            self._json(dev_identity_payload(self.runtime))
+        elif path == "/api/v1/locations":
+            self._json(locations_payload(self.runtime))
+        elif path == "/api/v1/cost/status":
+            self._json(cost_status(self.runtime))
+        elif path in {"/api/v1/providers", "/api/v1/providers/list"}:
+            self._json(providers_payload(self.runtime))
+        elif path == "/api/v1/providers/health":
+            self._json(provider_health_payload(self.runtime))
+        elif path == "/api/v1/plants":
+            self._json(_run(get_plants(self.runtime.repository, self.runtime.context(request_id="api-plants"))))
+        elif path.startswith("/api/v1/plants/") and path.endswith("/observations"):
+            plant_id = path.split("/")[-2]
+            self._json(_run(get_observations(self.runtime.repository, self.runtime.context(request_id="api-observations"), plant_id)))
+        elif path.startswith("/api/v1/plants/") and path.endswith("/vision"):
+            plant_id = path.split("/")[-2]
+            self._json({"visual_analyses": self.runtime.repository.list_visual_analyses_for_plant(self.runtime.organization_id, plant_id)})
+        elif path.startswith("/api/v1/plants/"):
+            plant_id = path.split("/")[-1]
+            payload = _run(get_plant(self.runtime.repository, self.runtime.context(request_id="api-plant"), plant_id))
+            self._json(payload if payload is not None else {"status": "not_found"}, status=HTTPStatus.OK if payload else HTTPStatus.NOT_FOUND)
+        elif path == "/api/v1/conversations":
+            self._json(get_conversations(self.runtime.repository, self.runtime.context(request_id="api-conversations")))
+        elif path.startswith("/api/v1/conversations/") and path.endswith("/messages"):
+            conversation_id = path.split("/")[-2]
+            self._json(self.runtime.repository.list_messages(self.runtime.organization_id, conversation_id))
+        elif path == "/api/v1/season/plans":
+            self._json({"season_plans": self.runtime.repository.list_season_plans(self.runtime.organization_id, self.runtime.workspace_id)})
+        elif path == "/api/v1/regulations/rules":
+            self._json(_run(get_active_regulations(self.runtime.repository, self.runtime.context(request_id="api-regulations"))))
+        elif path == "/api/v1/regulations/zones":
+            self._json(_run(get_regulation_zones(self.runtime.repository, self.runtime.context(request_id="api-zones"))))
+        elif path == "/api/v1/source-records":
+            ids = ",".join(query.get("ids", [])).split(",") if query.get("ids") else []
+            self._json({"source_records": source_records(self.runtime, [item for item in ids if item])})
+        elif path == "/api/v1/alpha/persistence-check":
+            self._json(persistence_summary(self.runtime))
+        else:
+            self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         try:
-            if path == "/api/v1/chat/stream":
-                self._chat_stream(self._read_json())
-                return
-            payload = self._read_json()
-            context = self.runtime.context(request_id=str(payload.get("request_id") or f"api-{path.rsplit('/', 1)[-1]}"))
-            if path == "/api/v1/seed/demo":
-                self._json(seed_demo(self.runtime))
-            elif path == "/api/v1/locations/active":
-                self._json(_run(set_active_location(self.runtime, **_active_location_payload(payload))))
-            elif path == "/api/v1/plants":
-                self._json(_run(post_plant(self.runtime.repository, self.runtime.botanist, context, **_plant_payload(payload))))
-            elif path.startswith("/api/v1/plants/") and path.endswith("/observations"):
-                plant_id = path.split("/")[-2]
-                self._json(_run(post_observation(self.runtime.repository, context, plant_id, **_observation_payload(payload))))
-            elif path == "/api/v1/chat":
-                self._json(_run(post_chat(self.runtime.orchestrator, context, **_chat_payload(self.runtime, payload))))
-            elif path == "/api/v1/context/geography":
-                self._json(_run(post_context_geography(self.runtime.context_compiler, context, payload.get("location_id") or self.runtime.primary_location_id, payload.get("timestamp"))))
-            elif path == "/api/v1/context/environment":
-                self._json(_run(post_context_environment(self.runtime.context_compiler, context, payload.get("location_id") or self.runtime.primary_location_id, payload.get("timestamp"))))
-            elif path == "/api/v1/vision/media":
-                self._json(_run(post_vision_media(self.runtime.vision, context, **_media_payload(payload))))
-            elif path == "/api/v1/vision/analyze":
-                self._json(_run(post_vision_analyze(self.runtime.vision, context, tool=self.runtime.vision_tool, **_vision_payload(payload))))
-            elif path == "/api/v1/research/search":
-                self._json(_run(get_research_search(self.runtime.scholar, context, query=str(payload.get("query") or ""), limit=int(payload.get("limit") or 10))))
-            elif path == "/api/v1/research/synthesize":
-                self._json(_run(post_research_synthesize(self.runtime.scholar, context, question=str(payload.get("question") or ""), user_plant_id=payload.get("user_plant_id"), location_id=payload.get("location_id") or self.runtime.primary_location_id, use_model=bool(payload.get("use_model", False)))))
-            elif path == "/api/v1/movement/check":
-                self._json(_run(post_movement_check(self.runtime.sentinel, context, **_movement_payload(self.runtime, payload))))
-            elif path == "/api/v1/season/plan":
-                self._json(_run(post_season_plan(self.runtime.season, self.runtime.season_context_provider, context, **_season_payload(self.runtime, payload))))
-            elif path == "/api/v1/calendar/preview":
-                self._json(post_calendar_preview(self.runtime.calendar, context, season_plan_id=str(payload["season_plan_id"]), calendar_binding_id=str(payload.get("calendar_binding_id") or self.runtime.calendar_binding_id)))
-            elif path == "/api/v1/calendar/commit":
-                self._json(_run(post_calendar_commit(self.runtime.calendar, context, preview_id=str(payload["preview_id"]))))
-            elif path == "/api/v1/markets/context":
-                self._json(_run(post_economics_context(self.runtime.mercator, context, **_market_payload(self.runtime, payload))))
-            else:
-                self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
+            with self.runtime_lock:
+                self._api_post(path)
         except KeyError as exc:
             self._json({"status": "bad_request", "missing": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _api_post(self, path: str) -> None:
+        if path == "/api/v1/chat/stream":
+            self._chat_stream(self._read_json())
+            return
+        payload = self._read_json()
+        context = self.runtime.context(request_id=str(payload.get("request_id") or f"api-{path.rsplit('/', 1)[-1]}"))
+        if path == "/api/v1/seed/demo":
+            self._json(seed_demo(self.runtime))
+        elif path == "/api/v1/locations/active":
+            self._json(_run(set_active_location(self.runtime, **_active_location_payload(payload))))
+        elif path == "/api/v1/plants":
+            self._json(_run(post_plant(self.runtime.repository, self.runtime.botanist, context, **_plant_payload(payload))))
+        elif path.startswith("/api/v1/plants/") and path.endswith("/observations"):
+            plant_id = path.split("/")[-2]
+            self._json(_run(post_observation(self.runtime.repository, context, plant_id, **_observation_payload(payload))))
+        elif path == "/api/v1/chat":
+            self._json(_run(post_chat(self.runtime.orchestrator, context, **_chat_payload(self.runtime, payload))))
+        elif path == "/api/v1/context/geography":
+            self._json(_run(post_context_geography(self.runtime.context_compiler, context, payload.get("location_id") or self.runtime.primary_location_id, payload.get("timestamp"))))
+        elif path == "/api/v1/context/environment":
+            self._json(_run(post_context_environment(self.runtime.context_compiler, context, payload.get("location_id") or self.runtime.primary_location_id, payload.get("timestamp"))))
+        elif path == "/api/v1/vision/media":
+            self._json(_run(post_vision_media(self.runtime.vision, context, **_media_payload(payload))))
+        elif path == "/api/v1/vision/analyze":
+            self._json(_run(post_vision_analyze(self.runtime.vision, context, tool=self.runtime.vision_tool, **_vision_payload(payload))))
+        elif path == "/api/v1/research/search":
+            self._json(_run(get_research_search(self.runtime.scholar, context, query=str(payload.get("query") or ""), limit=int(payload.get("limit") or 10))))
+        elif path == "/api/v1/research/synthesize":
+            self._json(_run(post_research_synthesize(self.runtime.scholar, context, question=str(payload.get("question") or ""), user_plant_id=payload.get("user_plant_id"), location_id=payload.get("location_id") or self.runtime.primary_location_id, use_model=bool(payload.get("use_model", False)))))
+        elif path == "/api/v1/movement/check":
+            self._json(_run(post_movement_check(self.runtime.sentinel, context, **_movement_payload(self.runtime, payload))))
+        elif path == "/api/v1/season/plan":
+            self._json(_run(post_season_plan(self.runtime.season, self.runtime.season_context_provider, context, **_season_payload(self.runtime, payload))))
+        elif path == "/api/v1/calendar/preview":
+            self._json(post_calendar_preview(self.runtime.calendar, context, season_plan_id=str(payload["season_plan_id"]), calendar_binding_id=str(payload.get("calendar_binding_id") or self.runtime.calendar_binding_id)))
+        elif path == "/api/v1/calendar/commit":
+            self._json(_run(post_calendar_commit(self.runtime.calendar, context, preview_id=str(payload["preview_id"]))))
+        elif path == "/api/v1/markets/context":
+            self._json(_run(post_economics_context(self.runtime.mercator, context, **_market_payload(self.runtime, payload))))
+        else:
+            self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[gaia-api] {self.address_string()} - {fmt % args}")
@@ -318,15 +337,17 @@ def _movement_payload(runtime: GaiaRuntime, payload: dict) -> dict:
 
 
 def _season_payload(runtime: GaiaRuntime, payload: dict) -> dict:
+    location_id = payload.get("location_id") or runtime.primary_location_id
+    location = runtime.repository.get_location(runtime.organization_id, location_id) if location_id else None
     return {
         "workspace_id": runtime.workspace_id,
-        "location_id": payload.get("location_id") or runtime.primary_location_id,
+        "location_id": location_id,
         "objective": str(payload.get("objective") or "Create a local alpha season plan."),
         "crop_names": payload.get("crop_names") or ["tomato"],
-        "start_date": str(payload.get("start_date") or "2026-09-15"),
-        "end_date": str(payload.get("end_date") or "2026-12-15"),
+        "start_date": str(payload["start_date"]) if payload.get("start_date") else None,
+        "end_date": str(payload["end_date"]) if payload.get("end_date") else None,
         "constraints": payload.get("constraints") or {},
-        "timezone": str(payload.get("timezone") or "America/Chicago"),
+        "timezone": str(payload.get("timezone") or (location or {}).get("timezone") or "UTC"),
         "use_model": bool(payload.get("use_model", False)),
         "include_mercator": bool(payload.get("include_mercator", True)),
     }

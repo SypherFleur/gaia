@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 import tempfile
 from pathlib import Path
@@ -21,6 +22,18 @@ from apps.api.gaia_api.runtime import (
 
 
 class ProtocolThreeRuntimeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # File-backed runtimes default Atlas geography to the live Census
+        # geocoder; tests must stay offline, so pin the local deterministic path.
+        self._previous_atlas_mode = os.environ.get("GAIA_ATLAS_GEOGRAPHY_MODE")
+        os.environ["GAIA_ATLAS_GEOGRAPHY_MODE"] = "local"
+
+    def tearDown(self) -> None:
+        if self._previous_atlas_mode is None:
+            os.environ.pop("GAIA_ATLAS_GEOGRAPHY_MODE", None)
+        else:
+            os.environ["GAIA_ATLAS_GEOGRAPHY_MODE"] = self._previous_atlas_mode
+
     def test_full_alpha_runtime_preserves_zero_spend_controls(self) -> None:
         runtime = create_runtime("sqlite:///:memory:", provider_modes=AlphaProviderModes(text_model="fixture", vision_model="fixture"))
         try:

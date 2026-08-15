@@ -111,6 +111,13 @@ class ToolGateway:
         self.health_monitor = health_monitor or ProviderHealthMonitor()
 
     async def execute(self, tool: GaiaTool, context: ToolExecutionContext, request: ToolRequest) -> ToolResult:
+        # Cache entries for private content must never be shared across tenants,
+        # regardless of how the call site built its cache key.
+        if request.cache_key is not None and (
+            request.contains_private_text or request.contains_private_image or request.contains_private_document
+        ):
+            request = replace(request, cache_key=f"org:{context.organization_id}:{request.cache_key}")
+
         denial = self._preflight_without_provider(tool, context)
         if denial is not None:
             self._audit(context, tool, "denied", denial)

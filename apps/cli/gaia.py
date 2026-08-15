@@ -175,8 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
     season_plan = season_subcommands.add_parser("plan", help="Create a Season Plan.")
     season_plan.add_argument("--crops", default="tomato")
     season_plan.add_argument("--goal", default="Create a local alpha season plan.")
-    season_plan.add_argument("--start-date", default="2026-09-15")
-    season_plan.add_argument("--end-date", default="2026-12-15")
+    season_plan.add_argument("--start-date", default=None, help="ISO date; defaults to today.")
+    season_plan.add_argument("--end-date", default=None, help="ISO date; defaults to the planner horizon after start.")
     season_plan.add_argument("--location")
     season_plan.set_defaults(handler=handle_season_plan)
     season_show = season_subcommands.add_parser("show", help="List Season Plans.")
@@ -472,18 +472,20 @@ def handle_sentinel_check_movement(args: argparse.Namespace) -> JsonDict:
 def handle_season_plan(args: argparse.Namespace) -> JsonDict:
     runtime = create_runtime(args.database, sovereign=args.sovereign)
     try:
+        location_id = _location_id(runtime.location_aliases, args.location)
+        location = runtime.repository.get_location(runtime.organization_id, location_id) if location_id else None
         return _run(
             post_season_plan(
                 runtime.season,
                 runtime.season_context_provider,
                 runtime.context(request_id="cli-season-plan"),
                 workspace_id=runtime.workspace_id,
-                location_id=_location_id(runtime.location_aliases, args.location),
+                location_id=location_id,
                 objective=args.goal,
                 crop_names=[crop.strip() for crop in args.crops.split(",") if crop.strip()],
                 start_date=args.start_date,
                 end_date=args.end_date,
-                timezone="America/Chicago",
+                timezone=str((location or {}).get("timezone") or "UTC"),
                 include_mercator=True,
             )
         )

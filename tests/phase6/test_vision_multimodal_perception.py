@@ -312,13 +312,48 @@ class VisionMultimodalPerceptionTest(unittest.TestCase):
         self.assertNotIn("future-paid-provider", {event["provider_id"] for event in usage})
 
     def test_cached_vision_analysis_avoids_second_provider_call(self) -> None:
-        plant = self.fixture.create_tomato_user_plant()
-        media = self.fixture.create_media(plant.id)
-        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, user_plant_id=plant.id))
-        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, user_plant_id=plant.id))
+        # Cache dedup applies to a genuinely identical request. Plant-linked analyses
+        # change their own botanist context (recent_visual_analyses grows), so those
+        # legitimately re-run the provider rather than serving results computed
+        # against an older context.
+        media = self.fixture.create_media()
+        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, persist_observation=False))
+        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, persist_observation=False))
 
         self.assertEqual(self.fixture.vision_provider.calls, 1)
         self.assertEqual(self.fixture.ledger.organization_usage(self.fixture.org.id)[-1]["status"], "cache_hit")
+
+    def test_vision_cache_is_not_shared_across_tenants_for_identical_images(self) -> None:
+        media = self.fixture.create_media()
+        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, persist_observation=False))
+
+        other_context = self.fixture.context(org=self.fixture.other_org, user=self.fixture.other_user, workspace=self.fixture.other_workspace)
+        other_media = run(
+            self.fixture.vision.create_image_attachment(
+                other_context,
+                image_base64=TINY_PNG_BASE64,
+                content_type="image/png",
+            )
+        )
+        run(self.fixture.vision.analyze_attachment(other_context, tool=self.fixture.vision_tool, media_attachment_id=other_media.id, persist_observation=False))
+
+        self.assertEqual(self.fixture.vision_provider.calls, 2)
+        self.assertEqual(self.fixture.ledger.organization_usage(self.fixture.other_org.id)[-1]["status"], "success")
+
+    def test_vision_cache_distinguishes_prompts_for_same_image(self) -> None:
+        media = self.fixture.create_media()
+        run(self.fixture.vision.analyze_attachment(self.fixture.context(), tool=self.fixture.vision_tool, media_attachment_id=media.id, persist_observation=False))
+        run(
+            self.fixture.vision.analyze_attachment(
+                self.fixture.context(),
+                tool=self.fixture.vision_tool,
+                media_attachment_id=media.id,
+                prompt="Focus only on the roots.",
+                persist_observation=False,
+            )
+        )
+
+        self.assertEqual(self.fixture.vision_provider.calls, 2)
 
     def test_plantnet_fixture_is_optional_and_not_a_diagnosis(self) -> None:
         media = self.fixture.create_media()

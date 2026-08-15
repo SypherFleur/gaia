@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added live U.S. Census Bureau reverse geocoding for Atlas admin geography (`CensusGeocoderAdapter`, `CensusGeographyTool`), mediated by the Tool Gateway with cost/quota/audit/cache enforcement and coordinates reduced to ~1.1 km before egress; mode via `GAIA_ATLAS_GEOGRAPHY_MODE`, fail-closed `UNRESOLVED`/`UNAVAILABLE` on non-U.S. coordinates or provider failure.
+- Fixed vision analysis cache tenant isolation: private-content cache keys are namespaced by organization at the Tool Gateway, and vision cache keys include a prompt/context digest so differing prompts or plant context re-run the provider.
+- Fixed chat season planning to derive the planning window from the user's message and the real current date (`derive_season_window`) with the location's timezone, replacing hardcoded 2026 dates across the orchestrator, API defaults, CLI defaults, and web form.
+- Fixed Genesys PGR live mode: implemented `search_accessions` with real Genesys API search, optional OAuth client credentials, and fail-closed provider errors instead of an `AttributeError` crash.
+- Fixed Mercator price comparability to reject mismatched or missing quality grades (`grade_mismatch`) instead of silently conflating quality tiers.
+- Fixed local alpha API thread safety by serializing request handling over the shared SQLite connection under `ThreadingHTTPServer`.
+- Fixed `gaia doctor` Python check to use `sys.executable` so doctor passes on non-Windows platforms; accepted both `GAIA_*` and `USDA_*` NASS/AMS API key names.
+- Added the repository agent harness (`AGENTS.md`, imported by `CLAUDE.md`) and the full code audit with remediation addendum (`docs/architecture/code-audit-2026-08-15.md`).
+
 - Added Phase 12 U.S. jurisdiction hardening with registry-backed jurisdiction packs, normalized authority metadata, `USStateJurisdictionPack`, fixture-backed Florida FDACS rules, expanded interstate movement matrix tests, non-U.S. legal movement fail-closed behavior, and regulated-pest alert provider invocation.
 - Added Phase 12 global biological profile fields for native/introduced ranges, biomes, ecoregions, climate associations, crop origin, crop/food/forage/ornamental uses, occurrence/research source hooks, and germplasm links.
 - Added migration `0012_phase12_jurisdiction_biology_cli.sql` for expanded `plant_profiles`.

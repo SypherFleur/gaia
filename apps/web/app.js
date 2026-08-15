@@ -58,6 +58,7 @@ function bindForms() {
   $("#vision-file").addEventListener("change", previewVisionFile);
   $("#vision-run").addEventListener("click", runVision);
   $("#season-form").addEventListener("submit", submitSeason);
+  seedSeasonDateDefaults();
   $("#calendar-preview").addEventListener("click", previewCalendar);
   $("#research-form").addEventListener("submit", submitResearchSearch);
   $("#research-synthesize").addEventListener("click", synthesizeResearch);
@@ -324,6 +325,18 @@ async function uploadAndAnalyzeImage(file, origin) {
   await renderSelectedPlant();
 }
 
+function seedSeasonDateDefaults() {
+  const startInput = document.querySelector("#season-form input[name='start']");
+  const endInput = document.querySelector("#season-form input[name='end']");
+  if (!startInput || !endInput) return;
+  const today = new Date();
+  const end = new Date(today);
+  end.setDate(end.getDate() + 90);
+  const iso = (value) => value.toISOString().slice(0, 10);
+  if (!startInput.value) startInput.value = iso(today);
+  if (!endInput.value) endInput.value = iso(end);
+}
+
 async function submitSeason(event) {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
@@ -333,8 +346,8 @@ async function submitSeason(event) {
       body: {
         crop_names: String(data.get("crops")).split(",").map((item) => item.trim()).filter(Boolean),
         objective: data.get("goal"),
-        start_date: data.get("start"),
-        end_date: data.get("end"),
+        start_date: data.get("start") || null,
+        end_date: data.get("end") || null,
         location_id: activeLocationId(),
         include_mercator: true,
       },

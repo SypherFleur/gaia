@@ -13,6 +13,7 @@ class BillingClass(str, Enum):
 
 
 class ProviderType(str, Enum):
+    GEOGRAPHY = "GEOGRAPHY"
     WEATHER = "WEATHER"
     CLIMATE = "CLIMATE"
     SOIL = "SOIL"

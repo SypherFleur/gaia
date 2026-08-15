@@ -56,7 +56,7 @@ class ContextCompiler:
         timestamp: str | None = None,
     ) -> ContextBundle:
         location = self._load_location(context.organization_id, location_id)
-        atlas_result = await self.atlas.build_geo_context(location, at_time=timestamp)
+        atlas_result = await self.atlas.build_geo_context(location, at_time=timestamp, context=context)
         terra_result = await self.terra.build_environmental_snapshot(location, context, timestamp=timestamp)
         return ContextBundle(
             geo_context=atlas_result.geo_context,
@@ -74,7 +74,7 @@ class ContextCompiler:
         timestamp: str | None = None,
     ) -> ContextBundle:
         location = self._load_location(context.organization_id, location_id)
-        atlas_result = await self.atlas.build_geo_context(location, at_time=timestamp)
+        atlas_result = await self.atlas.build_geo_context(location, at_time=timestamp, context=context)
         return ContextBundle(
             geo_context=atlas_result.geo_context,
             environmental_snapshot=None,

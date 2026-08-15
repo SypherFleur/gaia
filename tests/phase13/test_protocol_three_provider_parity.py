@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from dataclasses import asdict
 
-from packages.botany import FixtureGBIFProvider, GBIFApiAdapter, KewPOWOApiAdapter
+from packages.botany import FixtureGBIFProvider, FixtureGenesysProvider, GBIFApiAdapter, GenesysPGRAdapter, KewPOWOApiAdapter
 from packages.environment.fixture_adapters import FixtureNASAPowerProvider, FixtureNWSProvider
 from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter
 from packages.research import EuropePMCAdapter, FixtureResearchProvider, normalize_europe_pmc_work
@@ -115,6 +115,38 @@ class ProtocolThreeProviderParityTest(unittest.TestCase):
 
         self.assertEqual(set(asdict(live)), set(asdict(fixture)))
         self.assertEqual(set(asdict(live.provenance[0])), set(asdict(fixture.provenance[0])))
+
+    def test_genesys_live_adapter_fails_closed_instead_of_crashing(self) -> None:
+        adapter = GenesysPGRAdapter(base_url="http://127.0.0.1:9", timeout_seconds=0.2)
+        result = run(adapter.search_accessions("cowpea", limit=5))
+
+        self.assertEqual(result.status, "PROVIDER_ERROR")
+        self.assertTrue(any(warning.startswith("genesys_") for warning in result.warnings))
+
+    def test_genesys_live_normalizer_matches_fixture_germplasm_contract(self) -> None:
+        fixture = run(FixtureGenesysProvider().search_accessions("cowpea"))
+        live = GenesysPGRAdapter().normalize_accession_search(
+            "cowpea",
+            {
+                "content": [
+                    {
+                        "uuid": "acc-1",
+                        "accessionNumber": "TVu-12345",
+                        "taxonomy": {"genus": "Vigna", "species": "unguiculata"},
+                        "cropName": "cowpea",
+                        "instituteCode": "NGA039",
+                        "institute": {"code": "NGA039", "fullName": "IITA Genetic Resources Center"},
+                        "origCty": "NGA",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(set(asdict(live)), set(asdict(fixture)))
+        self.assertEqual(set(live.accessions[0]), set(fixture.accessions[0]))
+        self.assertEqual(set(asdict(live.provenance[0])), set(asdict(fixture.provenance[0])))
+        self.assertFalse(live.accessions[0]["availability_verified"])
+        self.assertFalse(live.accessions[0]["legal_movement_verified"])
 
     def test_kew_powo_normalizer_preserves_rights_and_provider_boundary(self) -> None:
         live = KewPOWOApiAdapter(user_agent="GAIA parity test").normalize_search_response(

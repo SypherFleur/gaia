@@ -4,6 +4,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field, replace
@@ -47,7 +48,7 @@ from packages.environment.fixture_adapters import FixtureNASAPowerProvider, Fixt
 from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter
 from packages.environment.providers import DisabledClimateProvider, DisabledSoilSurveyProvider, DisabledWaterProvider, DisabledWeatherProvider
 from packages.environment.tools import NASAPowerClimateTool, NWSForecastTool, USDASoilSurveyTool, USGSWaterSitesTool
-from packages.geospatial import AtlasService
+from packages.geospatial import AtlasService, CensusGeocoderAdapter, CensusGeographyTool
 from packages.geospatial.providers import (
     AdminResolution,
     AtlasZone,
@@ -127,6 +128,7 @@ ProviderMode = Literal["fixture", "live", "disabled", "local"]
 
 @dataclass(frozen=True, slots=True)
 class AlphaProviderModes:
+    atlas_geography: ProviderMode = "fixture"
     nws: ProviderMode = "fixture"
     nasa_power: ProviderMode = "fixture"
     usda_soil: ProviderMode = "fixture"
@@ -149,6 +151,7 @@ class AlphaProviderModes:
     def from_environment(cls, *, fixture_defaults: bool = False) -> "AlphaProviderModes":
         defaults = _fixture_provider_defaults() if fixture_defaults else _normal_provider_defaults()
         return cls(
+            atlas_geography=_mode("GAIA_ATLAS_GEOGRAPHY_MODE", defaults["atlas_geography"]),
             nws=_mode("GAIA_NWS_MODE", defaults["nws"]),
             nasa_power=_mode("GAIA_NASA_POWER_MODE", defaults["nasa_power"]),
             usda_soil=_mode("GAIA_USDA_SOIL_MODE", defaults["usda_soil"]),
@@ -251,12 +254,19 @@ def create_runtime(
         audit_log=audit_log,
     )
 
+    atlas_live = modes.atlas_geography == "live"
     atlas = AtlasService(
         repository,
         CLIGeographyProvider(fixture=fixture_defaults),
         FixtureWatershedProvider() if fixture_defaults else DisabledWatershedProvider(),
         FixtureHardinessProvider() if fixture_defaults else DisabledHardinessProvider(),
         CLIRegulatoryGeometryProvider(fixture=fixture_defaults) if fixture_defaults else DisabledRegulatoryGeometryProvider(),
+        tool_gateway=tool_gateway if atlas_live else None,
+        geography_tool=CensusGeographyTool(
+            CensusGeocoderAdapter(user_agent=os.environ.get("CENSUS_USER_AGENT") or "GAIA Local Alpha/0.1")
+        )
+        if atlas_live
+        else None,
     )
     terra = TerraService(
         repository,
@@ -725,7 +735,11 @@ async def set_active_location(
             is_demo=False,
             verified_at=now_iso(),
         )
-        atlas_result = await runtime.atlas.build_geo_context(candidate, persist=False)
+        atlas_result = await runtime.atlas.build_geo_context(
+            candidate,
+            persist=False,
+            context=runtime.context(request_id="atlas-active-location"),
+        )
         geo = atlas_result.geo_context
         if not geo.state_code or not geo.county_or_district:
             raise ValueError("location_resolution_unavailable")
@@ -1011,7 +1025,8 @@ def provider_health_rows(runtime: GaiaRuntime) -> list[dict]:
 
 def doctor_report(runtime: GaiaRuntime, *, host: str = DEFAULT_ALPHA_HOST, port: int = DEFAULT_ALPHA_PORT) -> dict:
     checks = [
-        _command_check("Python", ["py", "-3.13", "--version"]),
+        # sys.executable works on every platform; the Windows `py` launcher does not exist elsewhere.
+        _command_check("Python", [sys.executable, "--version"]),
         _command_check("Node", ["node", "--version"]),
         _command_check("npm", ["npm", "--version"]),
         _command_check("Git", ["git", "--version"]),
@@ -1088,6 +1103,7 @@ def ensure_runtime_schema(connection: sqlite3.Connection) -> None:
 def build_provider_registry(modes: AlphaProviderModes) -> ProviderRegistry:
     return ProviderRegistry(
         [
+            _provider("census-geocoder", "U.S. Census Bureau Geocoder", ProviderType.GEOGRAPHY, "U.S. Census Bureau", modes.atlas_geography, FreshnessClass.LONG, "US"),
             _provider("nws", "National Weather Service", ProviderType.WEATHER, "NOAA/NWS", modes.nws, FreshnessClass.SHORT, "US"),
             _provider("nasa-power", "NASA POWER", ProviderType.CLIMATE, "NASA", modes.nasa_power, FreshnessClass.MEDIUM),
             _provider("usda-nrcs-sda", "USDA NRCS Soil Data Access", ProviderType.SOIL, "USDA NRCS", modes.usda_soil, FreshnessClass.LONG, "US"),
@@ -1301,6 +1317,7 @@ def _fixture_defaults_for_runtime(database_url: str) -> bool:
 
 def _fixture_provider_defaults() -> dict[str, ProviderMode]:
     return {
+        "atlas_geography": "fixture",
         "nws": "fixture",
         "nasa_power": "fixture",
         "usda_soil": "fixture",
@@ -1323,6 +1340,7 @@ def _fixture_provider_defaults() -> dict[str, ProviderMode]:
 
 def _normal_provider_defaults() -> dict[str, ProviderMode]:
     return {
+        "atlas_geography": "live",
         "nws": "live",
         "nasa_power": "live",
         "usda_soil": "disabled",
@@ -1334,8 +1352,8 @@ def _normal_provider_defaults() -> dict[str, ProviderMode]:
         "aphis": "disabled",
         "texas_agriculture": "disabled",
         "florida_fdacs": "disabled",
-        "usda_nass": "live" if os.environ.get("GAIA_NASS_API_KEY") else "disabled",
-        "usda_ams": "live" if os.environ.get("GAIA_AMS_API_KEY") else "disabled",
+        "usda_nass": "live" if (os.environ.get("GAIA_NASS_API_KEY") or os.environ.get("USDA_NASS_API_KEY")) else "disabled",
+        "usda_ams": "live" if (os.environ.get("GAIA_AMS_API_KEY") or os.environ.get("USDA_AMS_API_KEY")) else "disabled",
         "plantnet": "disabled",
         "google_calendar": "disabled",
         "text_model": "local",
@@ -1399,7 +1417,11 @@ def _kew_provider(modes: AlphaProviderModes):
 
 def _genesys_provider(modes: AlphaProviderModes):
     if modes.genesys_pgr == "live":
-        return GenesysPGRAdapter()
+        return GenesysPGRAdapter(
+            user_agent=os.environ.get("GENESYS_USER_AGENT") or "GAIA Local Alpha/0.1",
+            client_id=os.environ.get("GENESYS_CLIENT_ID"),
+            client_secret=os.environ.get("GENESYS_CLIENT_SECRET"),
+        )
     if modes.genesys_pgr == "fixture":
         return FixtureGenesysProvider()
     provider = DisabledGermplasmProvider()

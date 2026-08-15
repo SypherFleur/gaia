@@ -125,7 +125,20 @@ Consequences:
 
 ---
 
-## 7. Verification notes
+## 7. Remediation addendum — 2026-08-15 (same day)
+
+Fixed on branch `claude/understand-repo-p7pkuf` after this audit was written; each fix carries regression tests, and the suite is fully green (367 tests, 0 failures, 8 opt-in skips):
+
+- **S1-1 fixed.** The Tool Gateway now namespaces every private-content cache key by organization (`packages/tools/gateway.py`), and the vision cache key includes a prompt/context digest (`packages/vision/service.py`). Plant-linked re-analyses intentionally re-run the provider because their botanist context changes.
+- **S1-2 fixed.** Chat season plans derive their window from the message and the real current date (`derive_season_window`, `packages/orchestration/orchestrator.py`), use the location's timezone, and the API/CLI/web defaults now fall back to the planner's today-based horizon instead of frozen 2026 constants.
+- **S1-3 fixed.** `GenesysPGRAdapter` implements `search_accessions` with a real Genesys API call, optional client-credentials OAuth, and fail-closed `PROVIDER_ERROR` on any failure.
+- **S1-4 fixed.** `comparable_units` rejects mismatched grades (`grade_mismatch`), including graded-vs-ungraded comparisons.
+- **S1-5 fixed.** API request handling is serialized behind a runtime lock (`GaiaAlphaHandler.runtime_lock`); static assets are served outside the lock.
+- **P-1 partially fixed.** `gaia doctor` uses `sys.executable` instead of the Windows `py` launcher — the previously failing CLI test passes on Linux. `package.json`/`Makefile` still use `py -3.13`.
+- **P-3 fixed.** NASS/AMS adapters and runtime accept both `GAIA_*` and `USDA_*` key names.
+- **Atlas live geocoder implemented** (top of §5.3): `CensusGeocoderAdapter` (`packages/geospatial/live_adapters.py`) resolves US admin geography from the free Census Bureau reverse geocoder, mediated by the Tool Gateway via `CensusGeographyTool` with a 30-day cache, always reducing coordinates to ~1.1 km before egress. Mode: `GAIA_ATLAS_GEOGRAPHY_MODE` (live by default for file-backed runs, fixture in tests). Non-US coordinates return `UNRESOLVED`; network failure fails closed. Note: the audit sandbox's egress policy blocks `geocoding.geo.census.gov`, so the live endpoint was verified structurally (request format, fail-closed path) but the first live-network confirmation must happen on a machine with open egress.
+
+## 8. Verification notes
 
 - All findings cite file:line and were made by reading source, not inferring from names or docs.
 - Not verified: live endpoints were not called (adapters judged "functional" by real HTTP client usage + real schema parsing + error handling in code); the LangGraph compiled path has not executed in this environment (`langgraph` not installed).

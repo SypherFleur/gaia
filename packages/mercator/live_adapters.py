@@ -8,6 +8,14 @@ import urllib.request
 from packages.mercator.providers import EconomicProviderResult, EconomicRequest
 
 
+def _first_env(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
 class NASSQuickStatsProvider:
     provider_id = "usda-nass"
 
@@ -17,7 +25,8 @@ class NASSQuickStatsProvider:
         self.timeout_seconds = timeout_seconds
 
     async def production(self, request: EconomicRequest) -> EconomicProviderResult:
-        api_key = os.environ.get(self.api_key_env)
+        # Both names are documented in .env.example; accept either.
+        api_key = _first_env(self.api_key_env, "USDA_NASS_API_KEY")
         if not api_key:
             return EconomicProviderResult(status="UNAVAILABLE", warnings=["nass_api_key_not_configured"])
         params = {
@@ -56,7 +65,7 @@ class AMSMyMarketNewsProvider:
         self.timeout_seconds = timeout_seconds
 
     async def market_reports(self, request: EconomicRequest) -> EconomicProviderResult:
-        api_key = os.environ.get(self.api_key_env)
+        api_key = _first_env(self.api_key_env, "USDA_AMS_API_KEY")
         if not api_key:
             return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_api_key_not_configured"])
         return EconomicProviderResult(status="UNAVAILABLE", warnings=["ams_live_endpoint_requires_explicit_report_selection"])

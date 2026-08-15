@@ -13,9 +13,10 @@ A local-first, multi-tenant agricultural intelligence system for SylionX. The pr
 3. **Tenancy.** Every query, cache key, and persisted record must be scoped by `organization_id` (and workspace where applicable). A new cache key without tenant scoping is a cross-tenant leak (see audit finding S1-1 for the existing instance).
 4. **Provenance.** External data gets a source record from GAIA's own compiled context. Model-generated citations/source IDs are rejected, never persisted. Do not weaken `packages/model_gateway/validation.py` or `packages/research/validation.py`.
 5. **Fail closed.** Sentinel (regulatory) and anything legal/safety-adjacent returns `UNRESOLVED`/`UNAVAILABLE` rather than guessing. A regulatory rule that matches too broadly is worse than one that doesn't match.
-6. **No fake reasoning.** Hardcoded values presented as computed output are bugs, not placeholders (e.g., the hardcoded season dates in `orchestrator.py:_handle_season`, audit S1-2). If real behavior can't be built yet, return an explicit `UNAVAILABLE`/deferred status — never a plausible-looking constant.
-7. **Migrations are append-only.** New schema = new `migrations/NNNN_*.sql`. Never edit an existing migration. Index every tenant-scoped table you add (`organization_id`, plus common sort columns).
-8. **External writes are gated.** Calendar writes, or any side effect leaving the machine, require the specific permission (`calendar.create`) and an explicit preview/commit step. Never make an external write path automatic.
+6. **No fake reasoning.** Hardcoded values presented as computed output are bugs, not placeholders (audit S1-2 — chat season plans shipped with frozen 2026 dates — was exactly this). If real behavior can't be built yet, return an explicit `UNAVAILABLE`/deferred status — never a plausible-looking constant.
+7. **Messy input is normal; handle it, don't refuse it.** GAIA should reach credible, verified, data-backed outcomes even when user input is incomplete or ambiguous — the way a person would. The reasoning layer interprets vague requests deterministically where possible (e.g., `derive_season_window` maps "plan my spring garden" to a real date window from today), states its assumptions and uncertainty in the output, and conveys results in usable forms (plans, calendars, reports). Non-determinism lives in interpretation and model reasoning — never in the guardrails above, and never as a license to fabricate: when the data genuinely can't support an answer, say `UNRESOLVED` and show what evidence is missing.
+8. **Migrations are append-only.** New schema = new `migrations/NNNN_*.sql`. Never edit an existing migration. Index every tenant-scoped table you add (`organization_id`, plus common sort columns).
+9. **External writes are gated.** Calendar writes, or any side effect leaving the machine, require the specific permission (`calendar.create`) and an explicit preview/commit step. Never make an external write path automatic.
 
 ## Architecture map
 
@@ -43,41 +44,40 @@ packages/persistence/sqlite.py ── single repository layer over migrations/*.
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'   # full suite
-python3 -m apps.cli.gaia doctor                        # env check (Python check itself is broken on non-Windows)
+python3 -m apps.cli.gaia doctor                        # env check
 python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev   # local alpha at 127.0.0.1:8765
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **347 tests, 8 opt-in skips, 1 known environmental failure** (`tests/cli/test_gaia_cli.py` doctor test fails on non-Windows because of P-1). Any other failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite and never hit the network.
+Baseline as of 2026-08-15: **367 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 
 Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** NWS, NASA POWER, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
 
-- **Genuinely live-capable today:** NWS, NASA POWER, GBIF, Europe PMC, Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
-- **Live mode exists but is broken or empty:** Genesys (`AttributeError` at call time — do not set `GAIA_GENESYS_MODE=live` until fixed), APHIS/FDACS (page-probe only, returns zero rules), NASS (unnormalized count only), AMS (no HTTP at all), Pl@ntNet and Google Calendar (`NotImplementedError`).
-- **No live path exists:** Atlas geocoding (hardcoded ~6-county table — the #1 real-data gap), SSURGO fetch, USGS Water, Texas Agriculture.
+- **Genuinely live-capable today:** Atlas geography (US Census geocoder via `GAIA_ATLAS_GEOGRAPHY_MODE=live`, gateway-mediated, privacy-reduced coordinates), NWS, NASA POWER, GBIF, Europe PMC, Genesys (real HTTP with optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
+- **Live mode exists but is empty or partial:** APHIS/FDACS (page-probe only, returns zero rules), NASS (unnormalized count only), AMS (no HTTP at all), Pl@ntNet and Google Calendar (`NotImplementedError`).
+- **No live path exists:** SSURGO fetch, USGS Water, Texas Agriculture; Atlas watershed/hardiness/regulatory-geometry remain fixture/local.
 - Env vars are `GAIA_*`-prefixed in code (`GAIA_NASS_API_KEY`, not `USDA_NASS_API_KEY`; `.env.example` lists both — the `GAIA_*` ones win).
 
 When you implement or extend a live adapter: it must produce the same normalized contract shape as its fixture sibling, and you must add/extend a parity test (pattern: `tests/phase13/test_protocol_three_provider_parity.py`). Live smokes are opt-in via `GAIA_RUN_*_SMOKE=1` env vars and must never be required by CI.
 
 ## Known bugs — check before building nearby
 
-Full detail in `docs/architecture/code-audit-2026-08-15.md`. Do not build on top of these without fixing or accounting for them:
+Full detail in `docs/architecture/code-audit-2026-08-15.md` (see its remediation addendum for what was fixed on 2026-08-15: all five S1 bugs, the doctor portability check, the NASS/AMS env-var split, and the Atlas live geocoder). Still open — do not build on top of these without fixing or accounting for them:
 
-- **S1-1** Vision cache: not tenant-scoped, ignores prompt/context (`packages/vision/service.py:98-119`).
-- **S1-2** Chat season plans hardcode Sept–Dec 2026 dates (`packages/orchestration/orchestrator.py:377-397`).
-- **S1-3** Genesys live mode crashes (`packages/botany/live_adapters.py` missing `search_accessions`).
-- **S1-4** Mercator price comparison ignores `grade` (`packages/mercator/normalization.py:78-87`).
-- **S1-5** One shared SQLite connection across `ThreadingHTTPServer` threads, no locking (`runtime.py:1055` + `server.py:209`).
 - **S2-1** `patch_plant`/`delete_plant` handlers exist but are not routed (server has no PATCH/DELETE).
+- **S2-2** API 500 responses echo raw exception details (`apps/api/gaia_api/server.py`).
+- **S2-3** Institutional knowledge search is keyword matching, not semantic retrieval (`packages/institutional/services.py:323`).
 - **S3-1** Sentinel `_scope_matches` skips county/zone checks when `state_code == "ANY"` (`packages/sentinel/engine.py:110-142`) — dormant; do not author a rule combining `ANY` with counties/zones until fixed.
+- **S3-2** `UsageLedger.estimated_external_spend` aggregates across all organizations (`packages/audit/ledger.py:67-69`).
 - **S3-4** DST-unaware timezone fallback in `packages/season/calculations.py:62-72`.
+- **P-1 (partial)** `package.json` scripts and the `Makefile` still invoke the Windows-only `py -3.13` launcher (doctor itself is fixed).
 
 ## Working rules
 
 - **Tests mirror phases.** New work gets tests under the matching `tests/phaseN/` (or a new phase directory). Preserve the deterministic, offline-by-default posture.
 - **Docs are load-bearing.** If you change behavior, update `CHANGELOG.md` and whichever status/architecture doc claims the old behavior. Doc drift is a recurring defect class here (two contradictory provider-mode tables shipped on the same day — see audit §5.1).
 - **Untrusted content stays untrusted.** Retrieved abstracts, fetched pages, model output, and user uploads never change system policy, tool selection, citations, or cost posture. Prompt-injection boundaries are tested; keep them.
-- **Real-data priority order** (when asked to reduce fixture reliance): Atlas geocoder → fix S1 bugs → Mercator NASS/AMS normalization → Genesys repair → SSURGO fetch → Sentinel rule ingestion. Paid/credentialed providers (Pl@ntNet, Google Calendar, any paid model) require an explicit human decision first — propose, don't enable.
+- **Real-data priority order** (when asked to reduce fixture reliance; first two tiers done 2026-08-15): ~~Atlas geocoder~~ → ~~fix S1 bugs~~ → Mercator NASS/AMS normalization → SSURGO fetch → Sentinel rule ingestion → semantic institutional retrieval. Paid/credentialed providers (Pl@ntNet, Google Calendar, any paid model) require an explicit human decision first — propose, don't enable.
 - **Location privacy.** Exact private coordinates never leave the machine; providers receive reduced/centroid geography per `packages/geospatial/privacy.py`. Preserve this in any new adapter.

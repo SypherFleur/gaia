@@ -214,6 +214,22 @@ class MercatorEconomicIntelligenceTest(unittest.TestCase):
         self.assertEqual(comparable_units(left, right), (False, "incompatible_unit_or_package"))
         self.assertFalse(self.fixture.mercator.compare_prices(left, right)["comparable"])
 
+    def test_09b_mismatched_grades_are_not_compared_silently(self) -> None:
+        left = {"value": 1.4, "unit": "$/lb", "package": None, "grade": "Grade A"}
+        right = {"value": 1.1, "unit": "$/lb", "package": None, "grade": "Grade C"}
+        self.assertEqual(comparable_units(left, right), (False, "grade_mismatch"))
+        self.assertFalse(self.fixture.mercator.compare_prices(left, right)["comparable"])
+
+        graded = {"value": 1.4, "unit": "$/lb", "package": None, "grade": "Grade A"}
+        ungraded = {"value": 1.1, "unit": "$/lb", "package": None}
+        self.assertEqual(comparable_units(graded, ungraded), (False, "grade_mismatch"))
+
+        same_grade = comparable_units(
+            {"value": 1.4, "unit": "$/lb", "package": None, "grade": "medium"},
+            {"value": 1.1, "unit": "$/lb", "package": None, "grade": "Medium"},
+        )
+        self.assertEqual(same_grade, (True, "same_unit_and_package"))
+
     def test_10_historical_market_report_is_not_labeled_current(self) -> None:
         fixture = Phase10Fixture(ams=FixtureAMSProvider(historical_report=True))
         try:

@@ -80,6 +80,12 @@ def comparable_units(left: JsonDict, right: JsonDict) -> tuple[bool, str]:
     right_unit = str(right.get("unit") or right.get("normalized_unit") or "")
     left_package = str(left.get("package") or "")
     right_package = str(right.get("package") or "")
+    left_grade = str(left.get("grade") or "").strip().lower()
+    right_grade = str(right.get("grade") or "").strip().lower()
+    # Different quality grades are different products; a price delta across
+    # grades would silently conflate quality tiers.
+    if left_grade != right_grade:
+        return False, "grade_mismatch"
     if left_unit == right_unit and left_package == right_package:
         return True, "same_unit_and_package"
     if left_unit in {"$/lb", "USD/lb"} and right_unit in {"$/lb", "USD/lb"}:
