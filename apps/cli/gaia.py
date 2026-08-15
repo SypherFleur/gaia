@@ -98,6 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
     providers_list.set_defaults(handler=handle_providers_list)
     providers_health = providers_subcommands.add_parser("health", help="Show provider health states.")
     providers_health.set_defaults(handler=handle_providers_health)
+    providers_verify = providers_subcommands.add_parser(
+        "verify",
+        help="Probe every keyless live provider against its real endpoint. Makes real network calls; no keys, no writes, no spend.",
+    )
+    providers_verify.add_argument("--latitude", type=float, default=None, help="Probe latitude; defaults to a public US coordinate.")
+    providers_verify.add_argument("--longitude", type=float, default=None, help="Probe longitude; defaults to a public US coordinate.")
+    providers_verify.set_defaults(handler=handle_providers_verify)
 
     sources = subcommands.add_parser("sources", help="Source and data-mode inspection.")
     sources_subcommands = sources.add_subparsers(dest="sources_command")
@@ -316,6 +323,21 @@ def handle_providers_health(args: argparse.Namespace) -> JsonDict:
         return {"providers": provider_health_rows(runtime)}
     finally:
         runtime.close()
+
+
+def handle_providers_verify(args: argparse.Namespace) -> JsonDict:
+    # Deliberately does not build a runtime: this probes the providers
+    # themselves, so a local misconfiguration cannot mask a working endpoint
+    # or make a broken one look fine.
+    from packages.providers.verification import PROBE_LATITUDE, PROBE_LONGITUDE, summarize, verify_live_providers
+
+    results = _run(
+        verify_live_providers(
+            latitude=args.latitude if args.latitude is not None else PROBE_LATITUDE,
+            longitude=args.longitude if args.longitude is not None else PROBE_LONGITUDE,
+        )
+    )
+    return summarize(results)
 
 
 def handle_sources_list(args: argparse.Namespace) -> JsonDict:

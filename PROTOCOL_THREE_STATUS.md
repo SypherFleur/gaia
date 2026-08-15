@@ -16,7 +16,7 @@ Browser: `http://127.0.0.1:8765/`. Optional seed: `python3 -m apps.cli.gaia --da
 
 ## Verification status
 
-- **Test suite: 436 tests, 0 failures, 8 opt-in skips.** Fully green on Linux.
+- **Test suite: 444 tests, 0 failures, 8 opt-in skips.** Fully green on Linux.
 - **CI: `.github/workflows/ci.yml`** runs the offline suite and constitution check on Linux/macOS/Windows across Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution stays intact and every live smoke stays opt-in. CI never reaches a live provider.
 - **Cash: $0.00 spent, $20.00 reserve intact.** No paid API, model, storage, telemetry, or overage path is enabled.
 - **Full code audit with five remediation tiers:** `docs/architecture/code-audit-2026-08-15.md`.
@@ -52,15 +52,23 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 
 The eight keyless live adapters were built and tested structurally (real HTTP client usage, real response-schema parsing, fail-closed paths, parity with fixture contracts) but **no successful live call has been recorded**. The development sandbox blocks those hosts at the egress proxy, and NASS/AMS additionally need keys that have not been issued.
 
-**This is the highest-value next action and only the owner can do it.** On a machine with open egress:
+**This is the highest-value next action and only the owner can do it.** On a machine with open egress, one command probes all eight against their real endpoints:
 
 ```bash
-GAIA_ATLAS_GEOGRAPHY_MODE=live GAIA_ATLAS_WATERSHED_MODE=live \
-  GAIA_USDA_SOIL_MODE=live GAIA_USGS_WATER_MODE=live \
-  python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
+python3 -m apps.cli.gaia providers verify
 ```
 
-Set a real location in the UI and check the environment view. Any schema drift fails closed with a reason string rather than corrupting data; report the reason and it is a small fix.
+It makes real network calls, needs no key, writes nothing, and spends nothing. Each provider reports one of:
+
+- **OK** — a real response parsed into GAIA's contract. That provider is verified.
+- **NO_DATA** — the provider answered but had nothing for the probe coordinate. Correct fail-closed behavior, not a defect.
+- **FAILED / ERROR** — unreachable endpoint or drifted schema. Paste the `detail` string; each maps to a specific adapter and is a small fix.
+
+Probe a specific location with `--latitude` / `--longitude`. For an end-to-end check afterwards, start the alpha and set a real location in the UI:
+
+```bash
+python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
+```
 
 ## Blocked on a human decision
 

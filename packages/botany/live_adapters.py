@@ -28,8 +28,12 @@ class GBIFApiAdapter:
     def _resolve_taxon_sync(self, query: str) -> TaxonomyResolution:
         url = f"{self.base_url}/species/match?verbose=true&name={urllib.parse.quote(query)}"
         request = urllib.request.Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        try:
+            payload = request_json(request, timeout_seconds=self.timeout_seconds)
+        except urllib.error.HTTPError as exc:
+            return TaxonomyResolution(status="PROVIDER_ERROR", query=query, warnings=[f"gbif_http_{exc.code}"])
+        except RetryExhausted as exc:
+            return TaxonomyResolution(status="PROVIDER_ERROR", query=query, warnings=[f"gbif_error:{exc.last_error.__class__.__name__}"])
         return self.normalize_match_response(query, payload, url)
 
     def normalize_match_response(self, query: str, payload: dict, url: str | None = None) -> TaxonomyResolution:

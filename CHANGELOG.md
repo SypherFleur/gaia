@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `gaia providers verify`: probes all eight keyless live providers against their real endpoints in one command (real network, no keys, no writes, no spend), reporting per provider whether a real response parsed into GAIA's contract, the provider answered with no coverage for the coordinate, or the endpoint failed. Transport failures are never reported as no-coverage, since conflating them would make an outage look like normal fail-closed behavior.
+- Gave `GBIFApiAdapter` the same fail-closed error handling as its sibling adapters; it previously let network errors propagate as raw exceptions instead of a `PROVIDER_ERROR` resolution.
+
 - Added a live Atlas watershed adapter backed by the free, keyless USGS NLDI service (`GAIA_ATLAS_WATERSHED_MODE=live`), resolving the hydrologic feature containing a point with ~1.1 km coordinate reduction before egress, name-then-reachcode fallback, and `UNRESOLVED` rather than a guessed basin when NLDI has no feature.
 
 - Fixed a latching circuit breaker: a provider that tripped the failure threshold could never recover, because the Tool Gateway denies `UNAVAILABLE` providers before the only code path that records a success. `ProviderHealthMonitor` now admits a half-open probe after a cooldown that doubles per open cycle (capped at 15 minutes), so a transient outage self-heals while a persistently broken provider is probed rarely.
