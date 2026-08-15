@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a live Atlas watershed adapter backed by the free, keyless USGS NLDI service (`GAIA_ATLAS_WATERSHED_MODE=live`), resolving the hydrologic feature containing a point with ~1.1 km coordinate reduction before egress, name-then-reachcode fallback, and `UNRESOLVED` rather than a guessed basin when NLDI has no feature.
+
 - Fixed a latching circuit breaker: a provider that tripped the failure threshold could never recover, because the Tool Gateway denies `UNAVAILABLE` providers before the only code path that records a success. `ProviderHealthMonitor` now admits a half-open probe after a cooldown that doubles per open cycle (capped at 15 minutes), so a transient outage self-heals while a persistently broken provider is probed rarely.
 - Added `packages/providers/http_retry.py`: bounded retry with exponential backoff and full jitter for transient failures only (connection errors, timeouts, 408/425/429/5xx). Non-retryable 4xx responses raise immediately so adapters map them to precise statuses. Wired into the Census, SSURGO, USGS Water, and Genesys adapters.
 - Closed the prose citation-fabrication gap (audit S3-3): `packages/provenance/identifiers.py` scans every string field, narrative text included, for DOI/PMID/PMCID identifiers. GuidancePlans reject any bibliographic identifier outright since GAIA attaches source records itself; research syntheses reject any identifier not backed by a retrieved work.

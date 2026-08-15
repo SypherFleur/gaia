@@ -49,15 +49,15 @@ python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 de
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **430 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
+Baseline as of 2026-08-15: **436 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 
-Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** Census geocoder, NWS, NASA POWER, SSURGO, USGS Water, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
+Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** Census geocoder, USGS NLDI watershed, NWS, NASA POWER, SSURGO, USGS Water, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
 
-- **Genuinely live-capable today:** Atlas geography (US Census geocoder), NWS, NASA POWER, SSURGO soil, USGS Water, GBIF, Europe PMC — all free and keyless. Genesys (optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), NASS and AMS (real normalization; each needs its own free API key), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
+- **Genuinely live-capable today:** Atlas geography (US Census geocoder), Atlas watershed (USGS NLDI), NWS, NASA POWER, SSURGO soil, USGS Water, GBIF, Europe PMC — all free and keyless. Genesys (optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), NASS and AMS (real normalization; each needs its own free API key), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
 - **Live mode exists but is empty or partial:** APHIS/FDACS (page-probe only, returns zero rules), Pl@ntNet and Google Calendar (`NotImplementedError`).
-- **No live path exists:** Texas Agriculture; Atlas watershed/hardiness/regulatory-geometry remain fixture/local.
+- **No live path exists:** Texas Agriculture; Atlas hardiness and regulatory-geometry remain fixture/local.
 - Env vars are `GAIA_*`-prefixed in code (`GAIA_NASS_API_KEY`, not `USDA_NASS_API_KEY`; `.env.example` lists both — the `GAIA_*` ones win).
 
 When you implement or extend a live adapter: it must produce the same normalized contract shape as its fixture sibling, and you must add/extend a parity test (pattern: `tests/phase13/test_protocol_three_provider_parity.py`). Live smokes are opt-in via `GAIA_RUN_*_SMOKE=1` env vars and must never be required by CI.

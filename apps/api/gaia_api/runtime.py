@@ -48,7 +48,7 @@ from packages.environment.fixture_adapters import FixtureNASAPowerProvider, Fixt
 from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter, USDASoilDataAccessAdapter, USGSWaterApiAdapter
 from packages.environment.providers import DisabledClimateProvider, DisabledSoilSurveyProvider, DisabledWaterProvider, DisabledWeatherProvider
 from packages.environment.tools import NASAPowerClimateTool, NWSForecastTool, USDASoilSurveyTool, USGSWaterSitesTool
-from packages.geospatial import AtlasService, CensusGeocoderAdapter, CensusGeographyTool
+from packages.geospatial import AtlasService, CensusGeocoderAdapter, CensusGeographyTool, USGSWatershedAdapter
 from packages.geospatial.providers import (
     AdminResolution,
     AtlasZone,
@@ -129,6 +129,7 @@ ProviderMode = Literal["fixture", "live", "disabled", "local"]
 @dataclass(frozen=True, slots=True)
 class AlphaProviderModes:
     atlas_geography: ProviderMode = "fixture"
+    atlas_watershed: ProviderMode = "fixture"
     nws: ProviderMode = "fixture"
     nasa_power: ProviderMode = "fixture"
     usda_soil: ProviderMode = "fixture"
@@ -152,6 +153,7 @@ class AlphaProviderModes:
         defaults = _fixture_provider_defaults() if fixture_defaults else _normal_provider_defaults()
         return cls(
             atlas_geography=_mode("GAIA_ATLAS_GEOGRAPHY_MODE", defaults["atlas_geography"]),
+            atlas_watershed=_mode("GAIA_ATLAS_WATERSHED_MODE", defaults["atlas_watershed"]),
             nws=_mode("GAIA_NWS_MODE", defaults["nws"]),
             nasa_power=_mode("GAIA_NASA_POWER_MODE", defaults["nasa_power"]),
             usda_soil=_mode("GAIA_USDA_SOIL_MODE", defaults["usda_soil"]),
@@ -258,7 +260,7 @@ def create_runtime(
     atlas = AtlasService(
         repository,
         CLIGeographyProvider(fixture=fixture_defaults),
-        FixtureWatershedProvider() if fixture_defaults else DisabledWatershedProvider(),
+        _watershed_provider(modes, fixture_defaults),
         FixtureHardinessProvider() if fixture_defaults else DisabledHardinessProvider(),
         CLIRegulatoryGeometryProvider(fixture=fixture_defaults) if fixture_defaults else DisabledRegulatoryGeometryProvider(),
         tool_gateway=tool_gateway if atlas_live else None,
@@ -1318,6 +1320,7 @@ def _fixture_defaults_for_runtime(database_url: str) -> bool:
 def _fixture_provider_defaults() -> dict[str, ProviderMode]:
     return {
         "atlas_geography": "fixture",
+        "atlas_watershed": "fixture",
         "nws": "fixture",
         "nasa_power": "fixture",
         "usda_soil": "fixture",
@@ -1341,6 +1344,7 @@ def _fixture_provider_defaults() -> dict[str, ProviderMode]:
 def _normal_provider_defaults() -> dict[str, ProviderMode]:
     return {
         "atlas_geography": "live",
+        "atlas_watershed": "live",
         "nws": "live",
         "nasa_power": "live",
         "usda_soil": "live",
@@ -1391,6 +1395,14 @@ def _soil_provider(modes: AlphaProviderModes):
     if modes.usda_soil == "fixture":
         return FixtureUSDASoilProvider()
     return DisabledSoilSurveyProvider()
+
+
+def _watershed_provider(modes: AlphaProviderModes, fixture_defaults: bool):
+    if modes.atlas_watershed == "live":
+        return USGSWatershedAdapter(user_agent=os.environ.get("USGS_USER_AGENT") or "GAIA Local Alpha/0.1")
+    if modes.atlas_watershed == "fixture" or fixture_defaults:
+        return FixtureWatershedProvider()
+    return DisabledWatershedProvider()
 
 
 def _water_provider(modes: AlphaProviderModes):

@@ -16,7 +16,7 @@ Browser: `http://127.0.0.1:8765/`. Optional seed: `python3 -m apps.cli.gaia --da
 
 ## Verification status
 
-- **Test suite: 430 tests, 0 failures, 8 opt-in skips.** Fully green on Linux.
+- **Test suite: 436 tests, 0 failures, 8 opt-in skips.** Fully green on Linux.
 - **CI: `.github/workflows/ci.yml`** runs the offline suite and constitution check on Linux/macOS/Windows across Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution stays intact and every live smoke stays opt-in. CI never reaches a live provider.
 - **Cash: $0.00 spent, $20.00 reserve intact.** No paid API, model, storage, telemetry, or overage path is enabled.
 - **Full code audit with five remediation tiers:** `docs/architecture/code-audit-2026-08-15.md`.
@@ -32,6 +32,7 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 | NASA POWER | live | Real, free, keyless |
 | SSURGO soil | live | Real, free, keyless |
 | USGS Water | live | Real, free, keyless |
+| Atlas watershed (USGS NLDI) | live | Real, free, keyless |
 | GBIF | live | Real, free, keyless |
 | Europe PMC | live | Real, free, keyless |
 | Ollama text / LLaVA | local | Real; requires local Ollama |
@@ -41,7 +42,7 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 | Kew POWO | disabled | Real adapter; held pending terms-of-use review |
 | APHIS / Florida FDACS | disabled | Live mode is a page-probe for provenance only — **yields zero structured rules** |
 | Texas Agriculture | fixture | No live path exists |
-| Atlas watershed / hardiness / regulatory geometry | fixture | No live path exists |
+| Atlas hardiness / regulatory geometry | fixture | No live path exists |
 | Pl@ntNet | disabled | `NotImplementedError`; needs a key |
 | Google Calendar | disabled | `NotImplementedError`; needs OAuth and is an external write |
 
@@ -49,12 +50,13 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 
 ## Not verified against live endpoints yet
 
-The seven keyless live adapters were built and tested structurally (real HTTP client usage, real response-schema parsing, fail-closed paths, parity with fixture contracts) but **no successful live call has been recorded**. The development sandbox blocks those hosts at the egress proxy, and NASS/AMS additionally need keys that have not been issued.
+The eight keyless live adapters were built and tested structurally (real HTTP client usage, real response-schema parsing, fail-closed paths, parity with fixture contracts) but **no successful live call has been recorded**. The development sandbox blocks those hosts at the egress proxy, and NASS/AMS additionally need keys that have not been issued.
 
 **This is the highest-value next action and only the owner can do it.** On a machine with open egress:
 
 ```bash
-GAIA_ATLAS_GEOGRAPHY_MODE=live GAIA_USDA_SOIL_MODE=live GAIA_USGS_WATER_MODE=live \
+GAIA_ATLAS_GEOGRAPHY_MODE=live GAIA_ATLAS_WATERSHED_MODE=live \
+  GAIA_USDA_SOIL_MODE=live GAIA_USGS_WATER_MODE=live \
   python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
 ```
 
