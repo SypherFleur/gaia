@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed a latching circuit breaker: a provider that tripped the failure threshold could never recover, because the Tool Gateway denies `UNAVAILABLE` providers before the only code path that records a success. `ProviderHealthMonitor` now admits a half-open probe after a cooldown that doubles per open cycle (capped at 15 minutes), so a transient outage self-heals while a persistently broken provider is probed rarely.
+- Added `packages/providers/http_retry.py`: bounded retry with exponential backoff and full jitter for transient failures only (connection errors, timeouts, 408/425/429/5xx). Non-retryable 4xx responses raise immediately so adapters map them to precise statuses. Wired into the Census, SSURGO, USGS Water, and Genesys adapters.
+- Closed the prose citation-fabrication gap (audit S3-3): `packages/provenance/identifiers.py` scans every string field, narrative text included, for DOI/PMID/PMCID identifiers. GuidancePlans reject any bibliographic identifier outright since GAIA attaches source records itself; research syntheses reject any identifier not backed by a retrieved work.
+- Fixed a latent circular import between `packages.cost.firewall` and `packages.providers.registry` that broke any process importing `packages.providers` first.
+- Added CI (`.github/workflows/ci.yml`): the offline suite and constitution check across Linux/macOS/Windows on Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution keeps automatic paid usage disabled and that every live smoke stays opt-in.
+
 - Replaced institutional knowledge search with real ranked retrieval: SQLite FTS5/BM25 with porter stemming (`migrations/0015_knowledge_fts.sql`, `search_knowledge_documents`), tenant- and collection-scoped through a join against `knowledge_documents`, with user-supplied FTS operators quoted so they match literally. The checksum `FixtureEmbeddingProvider` is no longer on the retrieval path.
 - Added a live USGS Water Services adapter (`GAIA_USGS_WATER_MODE=live`): nearby-site and current-reading retrieval normalized to the water contract, discarding NWIS `-999999` no-data sentinels, searching a ~1 km-rounded bounding box so exact coordinates never egress, and returning explicit `UNAVAILABLE` for unimplemented historical daily values.
 - Defaulted SSURGO soil and USGS Water to live for file-backed runtimes now that both have real, keyless adapters.

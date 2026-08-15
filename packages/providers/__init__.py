@@ -12,7 +12,8 @@ from .registry import (
     default_protocol_two_registry,
 )
 from .quota import QuotaDecision, QuotaDecisionStatus, QuotaManager
-from .health import ProviderHealthMonitor, ProviderHealthState
+from .health import ProviderHealthMonitor, ProviderHealthSnapshot, ProviderHealthState
+from .http_retry import RetryExhausted, request_json
 
 __all__ = [
     "AuthenticationRequirement",
@@ -27,7 +28,10 @@ __all__ = [
     "ProviderType",
     "default_protocol_two_registry",
     "ProviderHealthMonitor",
+    "ProviderHealthSnapshot",
     "ProviderHealthState",
+    "RetryExhausted",
+    "request_json",
     "QuotaDecision",
     "QuotaDecisionStatus",
     "QuotaManager",

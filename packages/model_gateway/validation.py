@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from packages.provenance import unverifiable_prose_identifiers
+
 
 JsonDict = dict[str, Any]
 
@@ -46,6 +48,11 @@ def validate_guidance_plan_draft(content: str) -> JsonDict:
     injected_ids = _find_model_generated_source_ids(draft)
     if injected_ids:
         raise GuidancePlanValidationError("model_generated_source_ids_rejected")
+    # GAIA attaches source records itself and never hands the model a citation
+    # to reuse, so any DOI/PMID/PMCID appearing anywhere in a plan — including
+    # inside prose — is fabricated by construction.
+    if unverifiable_prose_identifiers(draft, set()):
+        raise GuidancePlanValidationError("model_generated_citation_in_prose_rejected")
     return {
         "subject": draft["subject"].strip(),
         "situation": draft["situation"].strip(),

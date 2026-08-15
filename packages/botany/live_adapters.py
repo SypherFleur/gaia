@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 
 from packages.botany.providers import GermplasmSearchResult, TaxonomyResolution
+from packages.providers.http_retry import RetryExhausted, request_json
 from packages.provenance import ProvenanceRecord, content_hash
 
 
@@ -106,15 +107,14 @@ class GenesysPGRAdapter:
             url = f"{self.base_url}/api/v1/acn/search?l={int(limit)}"
             body = json.dumps({"_text": query}).encode("utf-8")
             request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = request_json(request, timeout_seconds=self.timeout_seconds)
         except urllib.error.HTTPError as exc:
             warnings = [f"genesys_http_{exc.code}"]
             if exc.code in {401, 403} and not (self.client_id and self.client_secret):
                 warnings.append("genesys_credentials_not_configured")
             return GermplasmSearchResult(status="PROVIDER_ERROR", query=query, warnings=warnings)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            return GermplasmSearchResult(status="PROVIDER_ERROR", query=query, warnings=[f"genesys_error:{exc.__class__.__name__}"])
+        except RetryExhausted as exc:
+            return GermplasmSearchResult(status="PROVIDER_ERROR", query=query, warnings=[f"genesys_error:{exc.last_error.__class__.__name__}"])
         return self.normalize_accession_search(query, payload)
 
     def _access_token(self) -> str | None:

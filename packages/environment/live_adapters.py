@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 
 from packages.environment.providers import EnvironmentalProviderResult
+from packages.providers.http_retry import RetryExhausted, request_json
 from packages.provenance import ProvenanceRecord, content_hash
 
 
@@ -167,12 +168,11 @@ class USDASoilDataAccessAdapter:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = request_json(request, timeout_seconds=self.timeout_seconds)
         except urllib.error.HTTPError as exc:
             return self._unavailable(f"ssurgo_http_{exc.code}", {})
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            return self._unavailable(f"ssurgo_error:{exc.__class__.__name__}", {})
+        except RetryExhausted as exc:
+            return self._unavailable(f"ssurgo_error:{exc.last_error.__class__.__name__}", {})
         return self.normalize_mapunit_response(payload, self.base_url)
 
     def build_query(self, latitude: float, longitude: float) -> str:
@@ -282,15 +282,14 @@ class USGSWaterApiAdapter:
         url = self.request_url(latitude, longitude)
         request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": self.user_agent})
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = request_json(request, timeout_seconds=self.timeout_seconds)
         except urllib.error.HTTPError as exc:
             # NWIS answers 404 when the bounding box contains no active sites.
             if exc.code == 404:
                 return EnvironmentalProviderResult(status="UNAVAILABLE", warnings=["usgs_no_sites_in_search_area"])
             return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"usgs_http_{exc.code}"])
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"usgs_error:{exc.__class__.__name__}"])
+        except RetryExhausted as exc:
+            return EnvironmentalProviderResult(status="PROVIDER_ERROR", warnings=[f"usgs_error:{exc.last_error.__class__.__name__}"])
         return self.normalize_instantaneous_response(payload, url, mode=mode)
 
     def request_url(self, latitude: float, longitude: float) -> str:

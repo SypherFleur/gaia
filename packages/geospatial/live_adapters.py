@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 
 from packages.geospatial.providers import AdminResolution, ProviderStatus
+from packages.providers.http_retry import RetryExhausted, request_json
 from packages.provenance import ProvenanceRecord, content_hash
 
 
@@ -41,12 +42,11 @@ class CensusGeocoderAdapter:
         self.last_request_url = url
         request = urllib.request.Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = request_json(request, timeout_seconds=self.timeout_seconds)
         except urllib.error.HTTPError as exc:
             return AdminResolution(status=ProviderStatus("UNAVAILABLE", f"census_http_{exc.code}"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            return AdminResolution(status=ProviderStatus("UNAVAILABLE", f"census_error:{exc.__class__.__name__}"))
+        except RetryExhausted as exc:
+            return AdminResolution(status=ProviderStatus("UNAVAILABLE", f"census_error:{exc.last_error.__class__.__name__}"))
         return self.normalize_geographies_response(payload, url)
 
     def request_url(self, latitude: float, longitude: float) -> str:

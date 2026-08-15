@@ -49,7 +49,7 @@ python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 de
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **407 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
+Baseline as of 2026-08-15: **430 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 
@@ -66,11 +66,16 @@ When you implement or extend a live adapter: it must produce the same normalized
 
 Full detail in `docs/architecture/code-audit-2026-08-15.md` (see its remediation addendum for what was fixed on 2026-08-15: all five S1 bugs, the doctor portability check, the NASS/AMS env-var split, and the Atlas live geocoder). Still open — do not build on top of these without fixing or accounting for them:
 
-- **S3-3** Citation validators only inspect known citation keys; a fabricated DOI free-texted into a prose field is not caught.
 - **Sentinel rules are hand-authored.** APHIS/FDACS "live" mode fetches and hashes the official pages for provenance but yields zero structured rules. Treat the fixture rule tables as the real decision source and keep the fail-closed posture.
 - **Knowledge retrieval is lexical, not vector-semantic.** FTS5/BM25 with stemming is real ranked retrieval (`search_knowledge_documents`), but it matches words, not meaning. `FixtureEmbeddingProvider` is still a checksum and is no longer on the retrieval path — do not treat it as an embedding model.
 - **No live path:** Atlas watershed/hardiness/regulatory-geometry.
 - **Unverified against real endpoints:** Census geocoder, NASS, AMS, SSURGO were built and tested structurally, but no successful live call has been recorded yet (sandbox egress + missing USDA keys).
+
+## Resilience rules
+
+- **All outbound HTTP goes through `packages/providers/http_retry.py::request_json`.** It retries only transient failures (connection errors, timeouts, 408/425/429/5xx) with exponential backoff plus full jitter, and raises non-retryable `HTTPError` immediately so adapters can map 404/400/401 to a precise status. Never retry a 4xx that isn't 429 — it burns quota and changes nothing.
+- **The circuit breaker must stay recoverable.** `ProviderHealthMonitor` opens after `failure_threshold` consecutive failures and admits one half-open probe after a cooldown that doubles per open cycle (capped). The gateway denies UNAVAILABLE providers *before* it would record a success, so removing the probe makes a tripped provider permanently dead until restart — that was a real bug, don't reintroduce it.
+- **No bibliographic identifier reaches persistence unverified.** `packages/provenance/identifiers.py` scans every string, prose included, for DOI/PMID/PMCID. GuidancePlans reject any such identifier outright (GAIA attaches sources itself); syntheses reject any not backed by a retrieved work id.
 
 ## Working rules
 

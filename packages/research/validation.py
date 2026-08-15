@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from packages.provenance import unverifiable_prose_identifiers
+
 
 class ResearchValidationError(ValueError):
     pass
@@ -34,6 +36,10 @@ def validate_synthesis_draft(content: str, *, allowed_work_ids: set[str]) -> dic
     unknown = sorted(citation for citation in cited if citation not in allowed_work_ids)
     if unknown:
         raise ResearchValidationError("model_generated_unknown_citation_rejected")
+    # Key-based checking above cannot see an identifier a model writes into a
+    # narrative field, which reads to a human as a real citation.
+    if unverifiable_prose_identifiers(draft, set(allowed_work_ids)):
+        raise ResearchValidationError("model_generated_unknown_identifier_in_prose_rejected")
     for field in ["supporting_claims", "contradictory_claims", "uncertain_claims"]:
         if field in draft and not isinstance(draft[field], list):
             raise ResearchValidationError(f"invalid_{field}")

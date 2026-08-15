@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from packages.providers.registry import BillingClass, ProviderRecord
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    from packages.providers.registry import ProviderRecord
 
 
 class CostDecisionStatus(str, Enum):
@@ -37,7 +39,12 @@ class CostFirewall:
     def __init__(self, financial_policy: FinancialPolicy | None = None) -> None:
         self.financial_policy = financial_policy or FinancialPolicy()
 
-    def check(self, provider: ProviderRecord, estimated_cost_usd: float = 0.0) -> CostDecision:
+    def check(self, provider: "ProviderRecord", estimated_cost_usd: float = 0.0) -> CostDecision:
+        # Imported at call time: packages.providers.registry imports this module
+        # for ProviderCostPolicy, so a module-level import here is a cycle that
+        # breaks whenever packages.providers is imported first.
+        from packages.providers.registry import BillingClass
+
         if not provider.enabled:
             return CostDecision(CostDecisionStatus.DENY, "provider_disabled", estimated_cost_usd)
 
