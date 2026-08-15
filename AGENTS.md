@@ -49,15 +49,15 @@ python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 de
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **367 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
+Baseline as of 2026-08-15: **389 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 
 Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** NWS, NASA POWER, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
 
-- **Genuinely live-capable today:** Atlas geography (US Census geocoder via `GAIA_ATLAS_GEOGRAPHY_MODE=live`, gateway-mediated, privacy-reduced coordinates), NWS, NASA POWER, GBIF, Europe PMC, Genesys (real HTTP with optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
-- **Live mode exists but is empty or partial:** APHIS/FDACS (page-probe only, returns zero rules), NASS (unnormalized count only), AMS (no HTTP at all), Pl@ntNet and Google Calendar (`NotImplementedError`).
-- **No live path exists:** SSURGO fetch, USGS Water, Texas Agriculture; Atlas watershed/hardiness/regulatory-geometry remain fixture/local.
+- **Genuinely live-capable today:** Atlas geography (US Census geocoder via `GAIA_ATLAS_GEOGRAPHY_MODE=live`, gateway-mediated, privacy-reduced coordinates), NWS, NASA POWER, SSURGO soil (`GAIA_USDA_SOIL_MODE=live`), GBIF, Europe PMC, Genesys (optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), NASS and AMS (real normalization; each needs its free API key), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
+- **Live mode exists but is empty or partial:** APHIS/FDACS (page-probe only, returns zero rules), Pl@ntNet and Google Calendar (`NotImplementedError`).
+- **No live path exists:** USGS Water, Texas Agriculture; Atlas watershed/hardiness/regulatory-geometry remain fixture/local.
 - Env vars are `GAIA_*`-prefixed in code (`GAIA_NASS_API_KEY`, not `USDA_NASS_API_KEY`; `.env.example` lists both — the `GAIA_*` ones win).
 
 When you implement or extend a live adapter: it must produce the same normalized contract shape as its fixture sibling, and you must add/extend a parity test (pattern: `tests/phase13/test_protocol_three_provider_parity.py`). Live smokes are opt-in via `GAIA_RUN_*_SMOKE=1` env vars and must never be required by CI.
@@ -66,18 +66,17 @@ When you implement or extend a live adapter: it must produce the same normalized
 
 Full detail in `docs/architecture/code-audit-2026-08-15.md` (see its remediation addendum for what was fixed on 2026-08-15: all five S1 bugs, the doctor portability check, the NASS/AMS env-var split, and the Atlas live geocoder). Still open — do not build on top of these without fixing or accounting for them:
 
-- **S2-1** `patch_plant`/`delete_plant` handlers exist but are not routed (server has no PATCH/DELETE).
 - **S2-2** API 500 responses echo raw exception details (`apps/api/gaia_api/server.py`).
 - **S2-3** Institutional knowledge search is keyword matching, not semantic retrieval (`packages/institutional/services.py:323`).
-- **S3-1** Sentinel `_scope_matches` skips county/zone checks when `state_code == "ANY"` (`packages/sentinel/engine.py:110-142`) — dormant; do not author a rule combining `ANY` with counties/zones until fixed.
-- **S3-2** `UsageLedger.estimated_external_spend` aggregates across all organizations (`packages/audit/ledger.py:67-69`).
+- **S3-3** Citation validators only inspect known citation keys; a fabricated DOI free-texted into a prose field is not caught.
 - **S3-4** DST-unaware timezone fallback in `packages/season/calculations.py:62-72`.
 - **P-1 (partial)** `package.json` scripts and the `Makefile` still invoke the Windows-only `py -3.13` launcher (doctor itself is fixed).
+- **P-4** Migrations 0011–0013 create tenant-scoped tables with no indexes.
 
 ## Working rules
 
 - **Tests mirror phases.** New work gets tests under the matching `tests/phaseN/` (or a new phase directory). Preserve the deterministic, offline-by-default posture.
 - **Docs are load-bearing.** If you change behavior, update `CHANGELOG.md` and whichever status/architecture doc claims the old behavior. Doc drift is a recurring defect class here (two contradictory provider-mode tables shipped on the same day — see audit §5.1).
 - **Untrusted content stays untrusted.** Retrieved abstracts, fetched pages, model output, and user uploads never change system policy, tool selection, citations, or cost posture. Prompt-injection boundaries are tested; keep them.
-- **Real-data priority order** (when asked to reduce fixture reliance; first two tiers done 2026-08-15): ~~Atlas geocoder~~ → ~~fix S1 bugs~~ → Mercator NASS/AMS normalization → SSURGO fetch → Sentinel rule ingestion → semantic institutional retrieval. Paid/credentialed providers (Pl@ntNet, Google Calendar, any paid model) require an explicit human decision first — propose, don't enable.
+- **Real-data priority order** (when asked to reduce fixture reliance; through SSURGO done 2026-08-15): ~~Atlas geocoder~~ → ~~fix S1 bugs~~ → ~~Mercator NASS/AMS normalization~~ → ~~SSURGO fetch~~ → Sentinel rule ingestion → semantic institutional retrieval → USGS Water. Paid/credentialed providers (Pl@ntNet, Google Calendar, any paid model) require an explicit human decision first — propose, don't enable.
 - **Location privacy.** Exact private coordinates never leave the machine; providers receive reduced/centroid geography per `packages/geospatial/privacy.py`. Preserve this in any new adapter.

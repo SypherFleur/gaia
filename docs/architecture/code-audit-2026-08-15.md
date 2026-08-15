@@ -138,6 +138,19 @@ Fixed on branch `claude/understand-repo-p7pkuf` after this audit was written; ea
 - **P-3 fixed.** NASS/AMS adapters and runtime accept both `GAIA_*` and `USDA_*` key names.
 - **Atlas live geocoder implemented** (top of §5.3): `CensusGeocoderAdapter` (`packages/geospatial/live_adapters.py`) resolves US admin geography from the free Census Bureau reverse geocoder, mediated by the Tool Gateway via `CensusGeographyTool` with a 30-day cache, always reducing coordinates to ~1.1 km before egress. Mode: `GAIA_ATLAS_GEOGRAPHY_MODE` (live by default for file-backed runs, fixture in tests). Non-US coordinates return `UNRESOLVED`; network failure fails closed. Note: the audit sandbox's egress policy blocks `geocoding.geo.census.gov`, so the live endpoint was verified structurally (request format, fail-closed path) but the first live-network confirmation must happen on a machine with open egress.
 
+### Second remediation tier — 2026-08-15
+
+Suite after this tier: **389 tests, 0 failures, 8 opt-in skips**.
+
+- **S2-1 fixed.** `do_PATCH`/`do_DELETE` added to the alpha server, routing `PATCH /api/v1/plants/{id}` and `DELETE /api/v1/plants/{id}` to the existing handlers, with an end-to-end HTTP test.
+- **S3-1 fixed.** `_scope_matches` no longer returns early on `state_code == "ANY"`; exclusion, county, and quarantine-zone narrowing now apply to ANY-state rules. A rule combining `ANY` with counties/zones is now safe to author.
+- **S3-2 fixed.** `UsageLedger.estimated_external_spend(organization_id=None)` scopes by tenant when given one; the no-argument form remains deployment-level spend for the machine-wide reserve check, documented in place.
+- **NASS live normalization implemented.** `normalize_production_response` parses real Quick Stats rows into the fixture's `ProductionStatistic` contract, drops disclosure-suppressed `(D)`/`(Z)` cells rather than coercing them to zero, marks coarser-than-requested answers with `state_level_fallback` instead of implying county precision, redacts the API key from persisted provenance URLs, and fails closed on HTTP/parse errors (400 → `nass_query_matched_no_records`).
+- **AMS live market reports implemented.** Real MyMarketNews HTTP fetch with API-key Basic auth, normalized to the fixture market-report/price-observation contract including package and grade (which now feed the S1-4 grade comparability check), skipping non-numeric prices and failing closed on errors.
+- **SSURGO live soil fetch implemented.** `USDASoilDataAccessAdapter.soil_context` posts a real Soil Data Access query joining `mapunit`/`component`/`chorizon`/`corestrictions`, normalizes to the full fixture soil contract (previously the normalizer emitted only a partial key set), accepts both SDA table shapes, rounds coordinates to ~11 m in the query, and returns `UNAVAILABLE` for unmatched points instead of guessing a soil type. Mode: `GAIA_USDA_SOIL_MODE=live`.
+
+Live-network verification for NASS, AMS, and SSURGO is still pending: the audit sandbox blocks those hosts, and NASS/AMS additionally require free API keys that have not been issued. All three were verified structurally against realistic payloads (including suppressed-value and empty-result cases) plus fail-closed paths.
+
 ## 8. Verification notes
 
 - All findings cite file:line and were made by reading source, not inferring from names or docs.

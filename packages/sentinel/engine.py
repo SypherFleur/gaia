@@ -117,9 +117,11 @@ def _scope_matches(scope: JsonDict, geo: JsonDict, request: JsonDict, side: str)
         return False
     if scope.get("country_code") == "ANY_NON_US" and country == "US":
         return False
-    if scope.get("state_code") == "ANY":
-        return state != scope.get("exclude_state_code")
-    if scope.get("state_code") and state != scope["state_code"]:
+    # "ANY" widens the state filter but must not skip the narrowing checks
+    # below — a rule scoped to ANY-state plus a county or quarantine zone
+    # applies only inside that county/zone.
+    state_scope = scope.get("state_code")
+    if state_scope and state_scope != "ANY" and state != state_scope:
         return False
     if scope.get("exclude_state_code") and state == scope["exclude_state_code"]:
         return False

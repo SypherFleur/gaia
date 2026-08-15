@@ -137,33 +137,75 @@ class NASAPowerApiAdapter:
             return json.loads(response.read().decode("utf-8"))
 
 
+SDA_POST_URL = "https://sdmdataaccess.sc.egov.usda.gov/Tabular/post.rest"
+
+
 class USDASoilDataAccessAdapter:
+    """SSURGO soil survey context from the USDA NRCS Soil Data Access service.
+
+    Survey context only — map unit, dominant component, and top-horizon
+    properties. This is never live soil moisture, and an unmatched point
+    returns UNAVAILABLE rather than a guessed soil type.
+    """
+
     provider_id = "usda-nrcs-sda"
 
+    def __init__(self, *, base_url: str = SDA_POST_URL, user_agent: str = "GAIA Local Alpha/0.1", timeout_seconds: float = 20.0) -> None:
+        self.base_url = base_url
+        self.user_agent = user_agent
+        self.timeout_seconds = timeout_seconds
+
+    async def soil_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
+        return await asyncio.to_thread(self._soil_context_sync, latitude, longitude)
+
+    def _soil_context_sync(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
+        body = json.dumps({"SERVICE": "query", "FORMAT": "JSON+COLUMNNAME", "QUERY": self.build_query(latitude, longitude)}).encode("utf-8")
+        request = urllib.request.Request(
+            self.base_url,
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": self.user_agent},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return self._unavailable(f"ssurgo_http_{exc.code}", {})
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            return self._unavailable(f"ssurgo_error:{exc.__class__.__name__}", {})
+        return self.normalize_mapunit_response(payload, self.base_url)
+
+    def build_query(self, latitude: float, longitude: float) -> str:
+        # ~11 m precision: far finer than any SSURGO map unit, so this costs no
+        # accuracy while keeping full-precision coordinates off the wire.
+        point = f"point({round(longitude, 4)} {round(latitude, 4)})"
+        return (
+            "SELECT TOP 1 mu.muname, c.compname, c.drainagecl, c.hydgrp, c.slope_l, c.slope_h, "
+            "ch.texture, ch.ph1to1h2o_r, ch.awc_r, ch.om_r, cr.resdept_r "
+            f"FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('{point}') AS m "
+            "INNER JOIN mapunit mu ON mu.mukey = m.mukey "
+            "INNER JOIN component c ON c.mukey = mu.mukey AND c.majcompflag = 'Yes' "
+            "LEFT OUTER JOIN chorizon ch ON ch.cokey = c.cokey AND ch.hzdept_r = 0 "
+            "LEFT OUTER JOIN corestrictions cr ON cr.cokey = c.cokey "
+            "ORDER BY c.comppct_r DESC"
+        )
+
     def normalize_mapunit_response(self, payload: dict, canonical_url: str) -> EnvironmentalProviderResult:
-        if not payload.get("Table"):
-            return EnvironmentalProviderResult(
-                status="UNAVAILABLE",
-                data={"semantic_note": "No soil survey result available; GAIA did not infer a soil type."},
-                provenance=[
-                    ProvenanceRecord(
-                        provider=self.provider_id,
-                        canonical_url=canonical_url,
-                        authority="USDA NRCS Soil Data Access",
-                        license="unknown",
-                        attribution="USDA NRCS",
-                        content_hash=content_hash(payload),
-                    )
-                ],
-            )
-        row = payload["Table"][0]
+        rows = _sda_rows(payload)
+        if not rows:
+            return self._unavailable("No soil survey result available; GAIA did not infer a soil type.", payload, canonical_url=canonical_url)
+        row = rows[0]
         data = {
             "map_unit": row.get("muname"),
             "component": row.get("compname"),
             "drainage_class": row.get("drainagecl"),
             "hydrologic_soil_group": row.get("hydgrp"),
+            "available_water_capacity": {"value": _sda_number(row.get("awc_r")), "evidence_type": "SURVEY"},
             "texture": {"value": row.get("texture"), "evidence_type": "SURVEY"},
-            "ph": {"value": row.get("ph1to1h2o_r"), "evidence_type": "SURVEY"},
+            "organic_matter": {"value": _sda_number(row.get("om_r")), "evidence_type": "SURVEY"},
+            "ph": {"value": _sda_number(row.get("ph1to1h2o_r")), "evidence_type": "SURVEY"},
+            "slope": {"value": _slope_range(row), "evidence_type": "SURVEY"},
+            "restrictive_depth": {"value": _sda_number(row.get("resdept_r")), "evidence_type": "SURVEY"},
             "semantic_note": "SSURGO is soil survey context, not live soil moisture.",
         }
         return EnvironmentalProviderResult(
@@ -172,15 +214,66 @@ class USDASoilDataAccessAdapter:
             provenance=[
                 ProvenanceRecord(
                     provider=self.provider_id,
+                    external_record_id=str(row.get("muname") or "ssurgo-mapunit"),
                     canonical_url=canonical_url,
                     authority="USDA NRCS Soil Data Access",
                     geographic_scope="soil survey map unit",
-                    license="unknown",
+                    license="public domain (U.S. federal government work)",
                     attribution="USDA NRCS",
                     content_hash=content_hash(payload),
                 )
             ],
         )
+
+    def _unavailable(self, note: str, payload: dict, *, canonical_url: str | None = None) -> EnvironmentalProviderResult:
+        return EnvironmentalProviderResult(
+            status="UNAVAILABLE",
+            data={"semantic_note": note},
+            provenance=[
+                ProvenanceRecord(
+                    provider=self.provider_id,
+                    canonical_url=canonical_url or self.base_url,
+                    authority="USDA NRCS Soil Data Access",
+                    license="public domain (U.S. federal government work)",
+                    attribution="USDA NRCS",
+                    content_hash=content_hash(payload),
+                )
+            ],
+        )
+
+
+def _sda_rows(payload: dict) -> list[dict]:
+    """Normalize SDA's Table shape into dicts.
+
+    JSON+COLUMNNAME returns the column-name array as the first row; some
+    callers already hold dict rows. Both are accepted.
+    """
+    table = payload.get("Table") or []
+    if not table:
+        return []
+    if isinstance(table[0], dict):
+        return [row for row in table if isinstance(row, dict)]
+    columns = [str(name) for name in table[0]]
+    return [dict(zip(columns, row)) for row in table[1:] if isinstance(row, list)]
+
+
+def _sda_number(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _slope_range(row: dict) -> str | None:
+    low = _sda_number(row.get("slope_l"))
+    high = _sda_number(row.get("slope_h"))
+    if low is None and high is None:
+        return None
+    if low is not None and high is not None:
+        return f"{low:g}-{high:g}%"
+    return f"{(low if low is not None else high):g}%"
 
 
 def _first_value(values: dict) -> float | None:

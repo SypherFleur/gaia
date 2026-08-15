@@ -64,8 +64,17 @@ class UsageLedger:
             records.append(record)
         return records
 
-    def estimated_external_spend(self) -> float:
-        row = self.connection.execute("SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total FROM usage_events").fetchone()
+    def estimated_external_spend(self, organization_id: str | None = None) -> float:
+        # Without organization_id this is deployment-level spend — the number the
+        # financial constitution's machine-wide reserve is checked against. Any
+        # tenant-facing display or per-tenant enforcement must pass organization_id.
+        if organization_id is None:
+            row = self.connection.execute("SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total FROM usage_events").fetchone()
+            return float(row["total"])
+        row = self.connection.execute(
+            "SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total FROM usage_events WHERE organization_id = ?",
+            (organization_id,),
+        ).fetchone()
         return float(row["total"])
 
 

@@ -82,6 +82,31 @@ class ProtocolThreeServerTest(unittest.TestCase):
             finally:
                 stop_server(process)
 
+    def test_plant_patch_and_delete_routes_are_reachable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            port = free_port()
+            database = f"sqlite:///{Path(tmp) / 'gaia-plant-edit.sqlite3'}"
+            process = start_server(port, database)
+            try:
+                base = f"http://127.0.0.1:{port}"
+                wait_json(f"{base}/api/v1/status")
+                post_json(f"{base}/api/v1/seed/demo", {})
+                plant_id = wait_json(f"{base}/api/v1/plants")[0]["id"]
+
+                patched = request_json(f"{base}/api/v1/plants/{plant_id}", {"nickname": "Renamed tomato", "tags": ["patio"]}, method="PATCH")
+                self.assertEqual(patched["status"], "updated")
+                self.assertEqual(patched["plant"]["nickname"], "Renamed tomato")
+                self.assertEqual(patched["plant"]["tags"], ["patio"])
+
+                deleted = request_json(f"{base}/api/v1/plants/{plant_id}", None, method="DELETE")
+                self.assertEqual(deleted["status"], "deleted")
+                self.assertEqual(wait_json(f"{base}/api/v1/plants"), [])
+
+                missing = request_json(f"{base}/api/v1/plants/does-not-exist", None, method="DELETE")
+                self.assertEqual(missing["status"], "not_found")
+            finally:
+                stop_server(process)
+
     def test_static_alpha_workspace_is_served(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             port = free_port()
@@ -288,6 +313,20 @@ def get_text(url: str) -> str:
 
 def post_json(url: str, payload: dict) -> dict:
     return json.loads(post_text(url, payload))
+
+
+def request_json(url: str, payload: dict | None, *, method: str) -> dict:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers={"Content-Type": "application/json"},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        return json.loads(exc.read().decode("utf-8"))
 
 
 def post_text(url: str, payload: dict) -> str:

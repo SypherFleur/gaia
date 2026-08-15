@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added real USDA NASS Quick Stats production normalization: parses live records into the canonical `ProductionStatistic` contract, drops disclosure-suppressed values instead of coercing them, flags state-level fallbacks rather than implying county precision, and redacts the API key from persisted provenance.
+- Added real USDA AMS MyMarketNews market-report retrieval and normalization with package/grade capture, non-numeric price rejection, and fail-closed provider errors.
+- Added real USDA NRCS Soil Data Access (SSURGO) soil-context fetch via `GAIA_USDA_SOIL_MODE=live`, normalized to the full soil contract, with `UNAVAILABLE` for unmatched points and ~11 m coordinate rounding in the query.
+- Added `PATCH`/`DELETE` routes for `/api/v1/plants/{id}`, making the existing plant edit and soft-delete handlers reachable over HTTP.
+- Fixed Sentinel scope matching so `state_code: "ANY"` rules still apply county, quarantine-zone, and state-exclusion narrowing instead of matching too broadly.
+- Fixed `UsageLedger.estimated_external_spend` to scope by organization when given one, keeping the unscoped form as explicit deployment-level spend.
+
 - Added live U.S. Census Bureau reverse geocoding for Atlas admin geography (`CensusGeocoderAdapter`, `CensusGeographyTool`), mediated by the Tool Gateway with cost/quota/audit/cache enforcement and coordinates reduced to ~1.1 km before egress; mode via `GAIA_ATLAS_GEOGRAPHY_MODE`, fail-closed `UNRESOLVED`/`UNAVAILABLE` on non-U.S. coordinates or provider failure.
 - Fixed vision analysis cache tenant isolation: private-content cache keys are namespaced by organization at the Tool Gateway, and vision cache keys include a prompt/context digest so differing prompts or plant context re-run the provider.
 - Fixed chat season planning to derive the planning window from the user's message and the real current date (`derive_season_window`) with the location's timezone, replacing hardcoded 2026 dates across the orchestrator, API defaults, CLI defaults, and web form.

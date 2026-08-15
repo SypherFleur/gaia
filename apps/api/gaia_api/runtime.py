@@ -45,7 +45,7 @@ from packages.domain import (
 from packages.domain.models import new_id, now_iso
 from packages.environment import TerraService
 from packages.environment.fixture_adapters import FixtureNASAPowerProvider, FixtureNWSProvider, FixtureUSDASoilProvider, FixtureUSGSWaterProvider
-from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter
+from packages.environment.live_adapters import NASAPowerApiAdapter, NWSApiAdapter, USDASoilDataAccessAdapter
 from packages.environment.providers import DisabledClimateProvider, DisabledSoilSurveyProvider, DisabledWaterProvider, DisabledWeatherProvider
 from packages.environment.tools import NASAPowerClimateTool, NWSForecastTool, USDASoilSurveyTool, USGSWaterSitesTool
 from packages.geospatial import AtlasService, CensusGeocoderAdapter, CensusGeographyTool
@@ -1386,6 +1386,8 @@ def _nasa_power_provider(modes: AlphaProviderModes):
 
 
 def _soil_provider(modes: AlphaProviderModes):
+    if modes.usda_soil == "live":
+        return USDASoilDataAccessAdapter(user_agent=os.environ.get("SSURGO_USER_AGENT") or "GAIA Local Alpha/0.1")
     if modes.usda_soil == "fixture":
         return FixtureUSDASoilProvider()
     return DisabledSoilSurveyProvider()

@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from apps.api.gaia_api.chat_api import get_conversations, post_chat, stream_chat_message
 from apps.api.gaia_api.context_api import post_context_environment, post_context_geography
 from apps.api.gaia_api.mercator_api import post_economics_context
-from apps.api.gaia_api.plant_api import get_observations, get_plant, get_plants, post_observation, post_plant
+from apps.api.gaia_api.plant_api import delete_plant, get_observations, get_plant, get_plants, patch_plant, post_observation, post_plant
 from apps.api.gaia_api.research_api import get_research_search, post_research_synthesize
 from apps.api.gaia_api.runtime import (
     DEFAULT_ALPHA_HOST,
@@ -168,6 +168,49 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
             self._json(_run(post_calendar_commit(self.runtime.calendar, context, preview_id=str(payload["preview_id"]))))
         elif path == "/api/v1/markets/context":
             self._json(_run(post_economics_context(self.runtime.mercator, context, **_market_payload(self.runtime, payload))))
+        else:
+            self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
+
+    def do_PATCH(self) -> None:
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        try:
+            with self.runtime_lock:
+                self._api_patch(path)
+        except KeyError as exc:
+            self._json({"status": "bad_request", "missing": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except Exception as exc:
+            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _api_patch(self, path: str) -> None:
+        if path.startswith("/api/v1/plants/") and len(path.split("/")) == 5:
+            plant_id = path.split("/")[-1]
+            payload = self._read_json()
+            context = self.runtime.context(request_id=str(payload.get("request_id") or "api-plant-patch"))
+            updated = _run(patch_plant(self.runtime.repository, context, plant_id, payload.get("updates") or payload))
+            self._json(
+                {"status": "updated", "plant": updated} if updated is not None else {"status": "not_found"},
+                status=HTTPStatus.OK if updated is not None else HTTPStatus.NOT_FOUND,
+            )
+        else:
+            self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        try:
+            with self.runtime_lock:
+                self._api_delete(path)
+        except Exception as exc:
+            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _api_delete(self, path: str) -> None:
+        if path.startswith("/api/v1/plants/") and len(path.split("/")) == 5:
+            plant_id = path.split("/")[-1]
+            context = self.runtime.context(request_id="api-plant-delete")
+            deleted = _run(delete_plant(self.runtime.repository, context, plant_id))
+            self._json(
+                {"status": "deleted", "plant_id": plant_id} if deleted else {"status": "not_found"},
+                status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+            )
         else:
             self._json({"status": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
 
