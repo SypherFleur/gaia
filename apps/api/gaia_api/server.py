@@ -5,6 +5,8 @@ import asyncio
 import json
 import mimetypes
 import threading
+import traceback
+import uuid
 from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -64,13 +66,13 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
             try:
                 self._static(path)
             except Exception as exc:
-                self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                self._internal_error(exc)
             return
         try:
             with self.runtime_lock:
                 self._api_get(path, query)
         except Exception as exc:
-            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._internal_error(exc)
 
     def _api_get(self, path: str, query: dict) -> None:
         if path == "/api/v1/status":
@@ -127,7 +129,7 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
         except KeyError as exc:
             self._json({"status": "bad_request", "missing": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._internal_error(exc)
 
     def _api_post(self, path: str) -> None:
         if path == "/api/v1/chat/stream":
@@ -179,7 +181,7 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
         except KeyError as exc:
             self._json({"status": "bad_request", "missing": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._internal_error(exc)
 
     def _api_patch(self, path: str) -> None:
         if path.startswith("/api/v1/plants/") and len(path.split("/")) == 5:
@@ -200,7 +202,7 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
             with self.runtime_lock:
                 self._api_delete(path)
         except Exception as exc:
-            self._json({"status": "error", "error": exc.__class__.__name__, "message": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._internal_error(exc)
 
     def _api_delete(self, path: str) -> None:
         if path.startswith("/api/v1/plants/") and len(path.split("/")) == 5:
@@ -230,6 +232,17 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
             self.wfile.write(chunk.encode("utf-8"))
             self.wfile.flush()
         self.close_connection = True
+
+    def _internal_error(self, exc: Exception) -> None:
+        # Exception text can carry file paths and SQL; log it locally and give
+        # the client only a correlation id to quote.
+        reference = uuid.uuid4().hex[:12]
+        print(f"[gaia-api] error {reference}: {exc.__class__.__name__}: {exc}")
+        traceback.print_exc()
+        self._json(
+            {"status": "error", "error": "internal_error", "error_reference": reference},
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)

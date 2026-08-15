@@ -107,6 +107,25 @@ class ProtocolThreeServerTest(unittest.TestCase):
             finally:
                 stop_server(process)
 
+    def test_server_errors_do_not_leak_exception_details(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            port = free_port()
+            database = f"sqlite:///{Path(tmp) / 'gaia-error.sqlite3'}"
+            process = start_server(port, database)
+            try:
+                base = f"http://127.0.0.1:{port}"
+                wait_json(f"{base}/api/v1/status")
+                # calendar/preview requires season_plan_id; a bogus one raises internally.
+                failure = request_json(f"{base}/api/v1/calendar/preview", {"season_plan_id": "does-not-exist"}, method="POST")
+
+                self.assertEqual(failure["error"], "internal_error")
+                self.assertTrue(failure["error_reference"])
+                self.assertNotIn("message", failure)
+                self.assertNotIn("Traceback", json.dumps(failure))
+                self.assertNotIn(str(Path(tmp)), json.dumps(failure))
+            finally:
+                stop_server(process)
+
     def test_static_alpha_workspace_is_served(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             port = free_port()

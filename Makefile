@@ -1,21 +1,24 @@
 .PHONY: check lint test eval gaia seed dev
 
+# Override with `make PYTHON=py\ -3.13 test` on Windows, or set GAIA_PYTHON.
+PYTHON ?= $(if $(GAIA_PYTHON),$(GAIA_PYTHON),python3)
+
 check:
-	py -3.13 scripts/bootstrap/validate_constitution.py
+	$(PYTHON) scripts/bootstrap/validate_constitution.py
 
 lint: check
 
 test:
-	py -3.13 -m unittest discover -s tests -p "test_*.py"
+	$(PYTHON) -m unittest discover -s tests -p "test_*.py"
 
 eval:
-	py -3.13 scripts/eval/run_eval_smoke.py
+	$(PYTHON) scripts/eval/run_eval_smoke.py
 
 gaia:
-	py -3.13 -m apps.cli.gaia
+	$(PYTHON) -m apps.cli.gaia
 
 seed:
-	py -3.13 -m apps.cli.gaia seed demo
+	$(PYTHON) -m apps.cli.gaia seed demo
 
 dev:
-	py -3.13 -m apps.cli.gaia dev
+	$(PYTHON) -m apps.cli.gaia dev

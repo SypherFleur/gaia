@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Made the command surface cross-platform: `npm test`/`make test` and the other scripts now resolve a Python interpreter per platform (`scripts/bootstrap/python_launcher.js`, `PYTHON`/`GAIA_PYTHON` overrides) instead of requiring the Windows-only `py -3.13` launcher.
+- Stopped API 500 responses from echoing exception details; clients receive an opaque `error_reference` and the type, message, and traceback are logged server-side only.
+- Made the missing-`tzdata` timezone fallback DST-aware for U.S. zones instead of a fixed offset that was an hour wrong for roughly half the year; unknown zones now report `UTC (unresolved <zone>)` rather than silently substituting UTC.
+- Added migration `0014_institutional_tenant_indexes.sql` indexing `organization_id` plus sort and parent keys across the Phase 11-13 institutional tables.
+
 - Added real USDA NASS Quick Stats production normalization: parses live records into the canonical `ProductionStatistic` contract, drops disclosure-suppressed values instead of coercing them, flags state-level fallbacks rather than implying county precision, and redacts the API key from persisted provenance.
 - Added real USDA AMS MyMarketNews market-report retrieval and normalization with package/grade capture, non-numeric price rejection, and fail-closed provider errors.
 - Added real USDA NRCS Soil Data Access (SSURGO) soil-context fetch via `GAIA_USDA_SOIL_MODE=live`, normalized to the full soil contract, with `UNAVAILABLE` for unmatched points and ~11 m coordinate rounding in the query.

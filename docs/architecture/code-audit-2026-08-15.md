@@ -151,6 +151,15 @@ Suite after this tier: **389 tests, 0 failures, 8 opt-in skips**.
 
 Live-network verification for NASS, AMS, and SSURGO is still pending: the audit sandbox blocks those hosts, and NASS/AMS additionally require free API keys that have not been issued. All three were verified structurally against realistic payloads (including suppressed-value and empty-result cases) plus fail-closed paths.
 
+### Third remediation tier — 2026-08-15
+
+Suite after this tier: **396 tests, 0 failures, 8 opt-in skips**. This closes every audit finding except the three that are genuine build work (S2-3 semantic retrieval, Sentinel rule ingestion, USGS Water) and S3-3.
+
+- **P-1 fully fixed.** `npm test` and `make test` now run on Linux/macOS/Windows: npm scripts resolve an interpreter via `scripts/bootstrap/python_launcher.js` (honours `GAIA_PYTHON`, prefers the `py` launcher only on Windows), and the `Makefile` takes a `PYTHON`/`GAIA_PYTHON` override. Both were verified green on Linux, where they previously could not run at all.
+- **S2-2 fixed.** 500 responses now return `{"status": "error", "error": "internal_error", "error_reference": "<id>"}`; the exception type, message, and traceback go to the server log only. A regression test asserts no exception text, traceback, or filesystem path reaches the client.
+- **S3-4 fixed.** The `tzdata`-missing fallback is now DST-aware (`_FallbackUSTimezone`, post-2007 U.S. rule) for the U.S. zones GAIA plans in, instead of a fixed offset that was an hour wrong for half the year. Non-DST zones (Phoenix, Honolulu) never shift, and an unknown zone returns UTC with an explicit `UTC (unresolved <zone>)` label rather than silently pretending the requested zone was honoured.
+- **P-4 fixed.** `migrations/0014_institutional_tenant_indexes.sql` adds 22 indexes over the Phase 11–13 tenant-scoped tables — `(organization_id, created_at/started_at)` for every list query, plus parent-key indexes for suite/collection/dataset lookups. Verified applied and used (`EXPLAIN QUERY PLAN` selects `idx_knowledge_documents_org`).
+
 ## 8. Verification notes
 
 - All findings cite file:line and were made by reading source, not inferring from names or docs.
