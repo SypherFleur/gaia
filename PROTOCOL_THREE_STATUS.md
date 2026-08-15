@@ -1,119 +1,82 @@
 # GAIA Protocol Three Status
 
-Status date: 2026-08-14
+Status date: 2026-08-15
 
-Protocol Three is at the local-owner manual alpha gate. Public deployment, production authentication, live Postgres release validation, calendar writes, paid providers, and international legal jurisdiction packs remain blocked until Jason manually tests the browser alpha and approves the next gate.
+Protocol Three is at the local-owner manual alpha gate. The engine is production-grade; the deployment story is not, and cannot be until the owner makes the authentication and hosting decisions listed under "Blocked on a human decision".
 
-## One-Command Startup
+## One-command startup
 
-Run from the repository root:
-
-```powershell
-py -3.13 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
+```bash
+python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
 ```
 
-Manual browser URL:
+Browser: `http://127.0.0.1:8765/`. Optional seed: `python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 seed demo`.
 
-```text
-http://127.0.0.1:8765/
-```
+`npm test`, `make test`, and the direct `python3 -m unittest` command all work on Linux, macOS, and Windows. Set `GAIA_PYTHON` to pin an interpreter.
 
-Optional seed command:
+## Verification status
 
-```powershell
-py -3.13 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 seed demo
-```
+- **Test suite: 430 tests, 0 failures, 8 opt-in skips.** Fully green on Linux.
+- **CI: `.github/workflows/ci.yml`** runs the offline suite and constitution check on Linux/macOS/Windows across Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution stays intact and every live smoke stays opt-in. CI never reaches a live provider.
+- **Cash: $0.00 spent, $20.00 reserve intact.** No paid API, model, storage, telemetry, or overage path is enabled.
+- **Full code audit with five remediation tiers:** `docs/architecture/code-audit-2026-08-15.md`.
 
-Development identity:
+## Provider modes — what is actually real
 
-- Label: `Development Identity`
-- Organization/workspace: stable local alpha organization and `Alpha Workspace`
-- Primary location: Austin garden, Travis County, TX
-- Session model: one seeded local development identity/session per alpha database
+Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`. Tests and `:memory:` databases get all-fixture. **A file-backed database defaults the free providers to live**, so the documented startup above makes real HTTP calls.
 
-## Runnable Components
-
-- GAIA CLI: `doctor`, `dev`, `seed demo`, `providers health`, `chat`, `plant`, `vision`, `botanist`, `scholar`, `sentinel`, `season`, `mercator`, `research`, and `eval`.
-- Local alpha API/UI: stdlib HTTP server under `/api/v1` plus static browser workspace.
-- Database: SQLite default at `sqlite:///./local_data/gaia-alpha.sqlite3`.
-- Seeded alpha data: one organization, one workspace, Texas locations, Cherokee Purple Tomato, observations, plant profile, sample research project, internal Season Plan, and seeded GuidancePlan.
-- Model gateway: local Ollama text model when `GAIA_TEXT_MODEL_MODE=local`; fixture model when set to fixture.
-- Vision gateway: local Ollama LLaVA when `GAIA_VISION_MODEL_MODE=local`; fixture vision when set to fixture.
-- Provider registry, cost firewall, audit/provenance, tenant scoping, sovereign context, Atlas, Terra, Botanist, Vision, Scholar, Sentinel, Season, Mercator, model gateway, tool gateway, calendar gateway, and provider registry are composed in the alpha runtime.
-
-## Broken Or Gated Components
-
-- Docker/Postgres: Docker CLI is installed, but `docker version` cannot reach the Docker Desktop Linux engine pipe: `//./pipe/dockerDesktopLinuxEngine` is missing. No live Postgres test is claimed.
-- Public deployment: blocked until owner manual browser approval.
-- Production auth: not implemented for this gate; the alpha uses a deterministic local development identity only.
-- Google Calendar writes: disabled by default. Calendar preview is local; external writes remain gated.
-- Pl@ntNet: disabled by default unless credentials and mode are explicitly configured later.
-- NASS/AMS: fixture-backed for alpha use. Existing opt-in smoke tests remain separate.
-- International legal jurisdiction: not implemented. GAIA remains U.S.-jurisdiction-only for regulation, with global botanical biology/taxonomy/research context.
-- Enterprise IAM, certifications, background jobs, large vector infrastructure, paid storage, paid telemetry, and paid model/API fallback: not enabled.
-
-## Local Environment Status
-
-Last checked with `gaia doctor`, `docker version`, `ollama list`, and `gaia providers health` on 2026-08-14.
-
-- Python: PASS, `Python 3.13.3`
-- Node: PASS, `v22.14.0`
-- npm: PASS, `10.9.2`
-- Git: PASS, `2.48.1.windows.1`
-- Docker engine: WARN, Docker Desktop Linux engine pipe unavailable
-- SQLite: PASS
-- Ollama: PASS, `llama3.1:latest` and `llava:latest` listed
-- UI/API reachability during doctor: DISABLED when not running
-- Cost firewall: PASS, automatic paid usage off, spend `$0.00`, reserve `$20.00`
-
-## Provider Modes
-
-Default local alpha modes:
-
-| Provider | Default mode | Notes |
+| Provider | Default (file-backed) | Reality |
 | --- | --- | --- |
-| NWS | fixture | Explicit free live mode via `GAIA_NWS_MODE=live` |
-| NASA POWER | fixture | Explicit free live mode via `GAIA_NASA_POWER_MODE=live` |
-| GBIF | fixture | Explicit free live mode via `GAIA_GBIF_MODE=live` |
-| Genesys PGR | fixture | Global germplasm discovery remains fixture-backed by default |
-| Europe PMC | fixture | Explicit free live mode via `GAIA_EUROPE_PMC_MODE=live` |
-| APHIS | fixture | Explicit live mode is read-only official-page provenance probing |
-| Texas Agriculture | fixture | U.S. state pack fixture |
-| Florida FDACS | fixture | Explicit live mode is read-only official-page provenance probing |
-| NASS | fixture | No automatic live credential usage |
-| AMS | fixture | No automatic live credential usage |
-| Google Calendar | disabled | Preview-only local alpha; external writes gated |
-| Pl@ntNet | disabled | No key or paid path required |
-| Ollama text | local | `llama3.1:latest` by default |
-| Ollama vision | local | `llava:latest` by default |
-| Future paid provider | disabled | Manual paid provider is disabled and no overage is allowed |
+| Census geocoder (Atlas admin) | live | Real, free, keyless. Gateway-mediated, coordinates reduced to ~1.1 km |
+| NWS | live | Real, free, keyless |
+| NASA POWER | live | Real, free, keyless |
+| SSURGO soil | live | Real, free, keyless |
+| USGS Water | live | Real, free, keyless |
+| GBIF | live | Real, free, keyless |
+| Europe PMC | live | Real, free, keyless |
+| Ollama text / LLaVA | local | Real; requires local Ollama |
+| Genesys PGR | disabled | Real adapter; optional OAuth creds, fails closed without them |
+| USDA NASS | live iff key set | Real normalization; needs a free API key |
+| USDA AMS | live iff key set | Real normalization; needs a free API key |
+| Kew POWO | disabled | Real adapter; held pending terms-of-use review |
+| APHIS / Florida FDACS | disabled | Live mode is a page-probe for provenance only — **yields zero structured rules** |
+| Texas Agriculture | fixture | No live path exists |
+| Atlas watershed / hardiness / regulatory geometry | fixture | No live path exists |
+| Pl@ntNet | disabled | `NotImplementedError`; needs a key |
+| Google Calendar | disabled | `NotImplementedError`; needs OAuth and is an external write |
 
-Fixture-vs-live parity tests verify that NWS, NASA POWER, GBIF, Europe PMC, APHIS, and FDACS live normalizers/read-only adapters return the same normalized contract shape as fixture mode.
+**Sentinel's decision source is hand-authored fixture rules.** Live mode proves the official pages are reachable and hashes them for provenance; it does not parse regulatory text. This is deliberate — see "Deliberately deferred".
 
-## Validation Status
+## Not verified against live endpoints yet
 
-Manual owner checklist:
+The seven keyless live adapters were built and tested structurally (real HTTP client usage, real response-schema parsing, fail-closed paths, parity with fixture contracts) but **no successful live call has been recorded**. The development sandbox blocks those hosts at the egress proxy, and NASS/AMS additionally need keys that have not been issued.
 
-```text
-docs/testing/manual-alpha-checklist.md
+**This is the highest-value next action and only the owner can do it.** On a machine with open egress:
+
+```bash
+GAIA_ATLAS_GEOGRAPHY_MODE=live GAIA_USDA_SOIL_MODE=live GAIA_USGS_WATER_MODE=live \
+  python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 dev
 ```
 
-Automated final verification for this checkpoint:
+Set a real location in the UI and check the environment view. Any schema drift fails closed with a reason string rather than corrupting data; report the reason and it is a small fix.
 
-- Final full test count: 324 tests
-- Final opt-in skip count: 8 skips
-- Eval prompt count: 81 fixture prompts
-- Browser/manual scenario automation: server/static UI smoke plus API owner-scenario smoke passed; no repo-local Playwright/Puppeteer/Selenium runner was installed, so no real browser driver was added.
-- Supervised dev smoke: `gaia dev --smoke-seconds 0.2` started, printed ports/model/database/spend, and shut down cleanly.
-- Port-collision regression: `gaia dev` now fails if the target port is serving a non-GAIA status endpoint or the child process exits.
-- Persistence restart proof: using `sqlite:///./local_data/gaia-alpha.sqlite3`, after seed, stop, restart, and persistence read, the same workspace retained 1 plant, 1 observation, 1 Season Plan, and 1 GuidancePlan.
-- Local-agent review: two read-only local agents reviewed guardrails/runtime. Findings were fixed before final verification: port-collision false pass, disabled provider health/mode clarity, UI hardcoded cost policy display, and incomplete economics chat provenance display.
+## Blocked on a human decision
 
-## Guardrail Status
+- **Production authentication.** The alpha uses one deterministic local development identity. No identity provider has been chosen. No code should be written until it is.
+- **Public deployment, Postgres release validation.** Gated on the owner's manual browser approval (`docs/testing/manual-alpha-checklist.md`). Docker was unavailable in the development environment, so no live Postgres run is claimed.
+- **Pl@ntNet** (needs a key) and **Google Calendar** (needs OAuth, and is an external write path). Both require an explicit human go under the financial constitution.
+- **Kew POWO** terms-of-use review.
+- **USDA NASS / AMS free API keys** if market data is wanted.
 
-- Cash: `$0.00` spent, `$20.00` reserve intact.
-- Paid usage: no paid API, paid model, paid storage, paid telemetry, paid vector DB, or overage path enabled.
-- Tenant isolation: alpha runtime uses one stable local organization/workspace identity and repository-scoped queries.
-- Provenance: API/UI display source IDs, source chips, provider modes, and source-backed records from GAIA services.
-- Sovereign mode: available through `--sovereign`; remote model egress remains disabled.
-- Route/UI boundary: HTTP route handlers and browser UI are presentation/runtime layers over existing GAIA services, gateways, policy checks, provenance, tenancy, and cost controls.
+## Deliberately deferred
+
+- **Sentinel regulatory rule ingestion.** Parsing APHIS/TDA/FDACS HTML into structured quarantine rules is brittle, and a subtly wrong answer in a fail-closed legal system is worse than an honest curated one. The current posture — hand-authored rules with live provenance probes and a documented review date — is the recommended interim until a structured government feed exists. Revisit only with a deliberate decision.
+- **Vector-semantic knowledge retrieval.** Institutional search is FTS5/BM25 with stemming: real ranked lexical retrieval, not embeddings. It matches words, not meaning. Adequate today; upgrading means a real embedding model, not the checksum `FixtureEmbeddingProvider`.
+
+## Guardrail status
+
+- Tool Gateway mediates every external provider call; no bypass exists.
+- Tenancy is enforced on queries, cache keys, and persisted records. Private-content cache keys are namespaced by organization at the gateway.
+- No bibliographic identifier reaches persistence unverified — including identifiers written into narrative prose.
+- Circuit breaker opens on repeated failure and recovers through a half-open probe; outbound HTTP retries only transient failures with jittered backoff.
+- Sovereign mode available via `--sovereign`; remote model egress stays disabled.
