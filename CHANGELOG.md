@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Removed the offline geography bounding-box table that returned a plausible county for any nearby coordinate and defaulted everything else to Travis County. `CLIGeographyProvider` now resolves only the exact seeded demo coordinates, and only in fixture mode; every other mode returns UNRESOLVED so the live U.S. Census geocoder is the sole source of real geography.
+- Marked seeded demo objects explicitly (`migrations/0016_demo_object_marking.sql` adds `is_demo` to `user_plants` and `season_plans`; locations already carried it) and badged them in the workbench, so sample content is never mistaken for a record the user created or a live provider reading.
+- Derived the seeded demo season plan's window from the current date instead of a frozen 2026-09-15 → 2026-12-15, which would have read as a stale bug once those dates passed.
+
 - Fixed the SSURGO live request, which returned HTTP 400 against the real endpoint for two independent reasons: the POST body used uppercase `SERVICE`/`FORMAT`/`QUERY` keys belonging to the older SDMTabularService endpoint instead of the POST REST contract's lowercase `query`/`format`, and the query selected `ch.texture`, which is not a `chorizon` column (texture lives in `chtexturegrp.texdesc`). WKT is now uppercase `POINT(...)`, the normalizer accepts either texture key, and an SDA rejection now surfaces the response body so a 400 is diagnosable from the status alone.
 - Fixed `providers verify` misreporting GBIF as FAILED. Taxonomy resolutions report `ACCEPTED`/`SYNONYM`/`AMBIGUOUS`, never `AVAILABLE`, so a successful match fell through to the failure branch and displayed its always-present semantic caveat as the failure reason. Outcome classification now recognizes each subsystem's success vocabulary.
 - `providers verify` now reports `warnings` separately from failure `detail`, so semantic caveats stay visible on an OK result instead of being mistaken for errors.

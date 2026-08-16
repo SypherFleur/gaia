@@ -26,7 +26,10 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
         # File-backed runtimes default Atlas geography to the live Census
         # geocoder; tests must stay offline, so pin the local deterministic path.
         self._previous_atlas_mode = os.environ.get("GAIA_ATLAS_GEOGRAPHY_MODE")
-        os.environ["GAIA_ATLAS_GEOGRAPHY_MODE"] = "local"
+        # "fixture" resolves only the seeded demo coordinates offline. "local"
+        # would now correctly resolve nothing, since no hardcoded county may
+        # stand in for the live Census geocoder.
+        os.environ["GAIA_ATLAS_GEOGRAPHY_MODE"] = "fixture"
 
     def tearDown(self) -> None:
         if self._previous_atlas_mode is None:
@@ -279,9 +282,12 @@ class ProtocolThreeRuntimeTest(unittest.TestCase):
                     set_active_location(
                         runtime,
                         source_kind="saved",
+                        # A seeded demo coordinate: offline geography resolves
+                        # only exact demo points now, since an arbitrary
+                        # coordinate requires the live Census geocoder.
                         label="Saved real location",
-                        latitude=29.72,
-                        longitude=-95.4,
+                        latitude=26.1,
+                        longitude=-98.2,
                         accuracy_m=800,
                     )
                 )

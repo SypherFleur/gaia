@@ -295,6 +295,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .badge.info { color: var(--accent); border-color: var(--accent-dim); background: #0d2438; }
 .badge.muted { color: var(--text-2); }
 
+/* Seeded sample content. Deliberately loud enough to never be mistaken for
+   a user record or a live provider reading. */
+.badge.demo {
+  color: #c9a227;
+  border-color: #4a3a12;
+  background: #2a2109;
+  letter-spacing: 0.08em;
+}
+
+.demo-note {
+  font-size: 11px;
+  color: var(--text-1);
+  border-left: 2px solid #c9a227;
+  padding-left: 8px;
+}
+
 .evidence-grade {
   font-weight: 700;
   min-width: 18px;

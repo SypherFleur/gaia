@@ -259,7 +259,10 @@ def create_runtime(
     atlas_live = modes.atlas_geography == "live"
     atlas = AtlasService(
         repository,
-        CLIGeographyProvider(fixture=fixture_defaults),
+        # Demo-coordinate echo is available when the runtime is all-fixture or
+        # Atlas geography is explicitly pinned to fixture; every other mode
+        # must reach the live Census geocoder or resolve nothing.
+        CLIGeographyProvider(fixture=fixture_defaults or modes.atlas_geography == "fixture"),
         _watershed_provider(modes, fixture_defaults),
         FixtureHardinessProvider() if fixture_defaults else DisabledHardinessProvider(),
         CLIRegulatoryGeometryProvider(fixture=fixture_defaults) if fixture_defaults else DisabledRegulatoryGeometryProvider(),
@@ -599,6 +602,7 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
                 location_id=demo_location_id,
                 growing_method="raised bed",
                 tags=["demo", "tomato"],
+                is_demo=True,
             )
         )
         tomato = created["plant"]
@@ -634,11 +638,14 @@ def seed_demo(runtime: GaiaRuntime) -> dict:
                 context,
                 workspace_id=runtime.workspace_id,
                 location_id=demo_location_id,
-                objective="Create a fall care plan for Cherokee Purple Tomato.",
+                objective="Create a care plan for Cherokee Purple Tomato.",
                 crop_names=["tomato"],
-                start_date="2026-09-15",
-                end_date="2026-12-15",
+                # Derived from today by the planner. A frozen window would read
+                # as a stale bug once the seeded dates fall into the past.
+                start_date=None,
+                end_date=None,
                 timezone="America/Chicago",
+                is_demo=True,
             )
         )
     if _guidance_plan_count(runtime) == 0:
@@ -1202,27 +1209,43 @@ def _manual_paid_provider() -> ProviderRecord:
     )
 
 
+# The seeded demo aliases and their own stated admin fields. This is not a
+# geocoder and must never be used as one: it echoes metadata already recorded
+# on the demo Location rows so offline tests and the demo workspace resolve
+# without a network call. Any other coordinate is UNRESOLVED.
+_DEMO_ALIAS_GEOGRAPHY: dict[tuple[float, float], tuple[str, str, str, str, str]] = {
+    (30.2672, -97.7431): ("Texas", "TX", "Travis County", "48453", "America/Chicago"),
+    (29.7604, -95.3698): ("Texas", "TX", "Harris County", "48201", "America/Chicago"),
+    (26.1, -98.2): ("Texas", "TX", "Hidalgo County", "48215", "America/Chicago"),
+    (28.5383, -81.3792): ("Florida", "FL", "Orange County", "12095", "America/New_York"),
+    (26.1901, -80.3659): ("Florida", "FL", "Broward County", "12011", "America/New_York"),
+    (33.749, -84.388): ("Georgia", "GA", "Fulton County", "13121", "America/New_York"),
+}
+
+
 class CLIGeographyProvider:
+    """Offline stand-in used only when the live Census geocoder is unavailable.
+
+    Real geography comes from `CensusGeocoderAdapter`. This class previously
+    carried bounding boxes that returned a plausible county for any nearby
+    coordinate and defaulted everything else to Travis County — a hardcoded
+    answer wearing the costume of a geocode result. It now resolves exactly the
+    seeded demo coordinates and returns UNRESOLVED for anything else, so a real
+    run cannot silently receive an invented county.
+    """
+
     def __init__(self, *, fixture: bool = True) -> None:
         self.fixture = fixture
         self.provider_id = "fixture-cli-geography" if fixture else "gaia-local-admin-geography"
 
     async def resolve_admin(self, latitude: float, longitude: float, at_time: str | None = None) -> AdminResolution:
-        if 33.5 <= latitude <= 35.5 and -119.0 <= longitude <= -117.0:
-            return self._admin("California", "CA", "Los Angeles County", "06037", "America/Los_Angeles")
-        if 30.0 <= latitude <= 34.9 and -86.0 <= longitude <= -80.0:
-            return self._admin("Georgia", "GA", "Fulton County", "13121", "America/New_York")
-        if 25.7 <= latitude <= 26.4 and -80.6 <= longitude <= -80.0:
-            return self._admin("Florida", "FL", "Broward County", "12011", "America/New_York")
-        if 27.0 <= latitude <= 29.5 and -83.0 <= longitude <= -80.0:
-            return self._admin("Florida", "FL", "Orange County", "12095", "America/New_York")
-        if 29.0 <= latitude <= 30.2 and -96.0 <= longitude <= -94.0:
-            return self._admin("Texas", "TX", "Harris County", "48201", "America/Chicago")
-        if 25.0 <= latitude <= 27.0 and -99.0 <= longitude <= -96.0:
-            return self._admin("Texas", "TX", "Hidalgo County", "48215", "America/Chicago")
         if not self.fixture:
+            # Live geography is configured; nothing here may substitute for it.
             return self._unresolved(latitude, longitude)
-        return self._admin("Texas", "TX", "Travis County", "48453", "America/Chicago")
+        match = _DEMO_ALIAS_GEOGRAPHY.get((round(latitude, 4), round(longitude, 4)))
+        if match is None:
+            return self._unresolved(latitude, longitude)
+        return self._admin(*match)
 
     def _admin(self, state: str, state_code: str, county: str, fips: str, timezone: str) -> AdminResolution:
         return AdminResolution(

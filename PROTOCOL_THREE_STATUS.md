@@ -16,7 +16,7 @@ Browser: `http://127.0.0.1:8765/`. Optional seed: `python3 -m apps.cli.gaia --da
 
 ## Verification status
 
-- **Test suite: 463 tests, 0 failures, 9 opt-in skips.** Fully green on Linux.
+- **Test suite: 470 tests, 0 failures, 9 opt-in skips.** Fully green on Linux.
 - **CI: `.github/workflows/ci.yml`** runs the offline suite and constitution check on Linux/macOS/Windows across Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution stays intact and every live smoke stays opt-in. CI never reaches a live provider.
 - **Cash: $0.00 spent, $20.00 reserve intact.** No paid API, model, storage, telemetry, or overage path is enabled.
 - **Full code audit with five remediation tiers:** `docs/architecture/code-audit-2026-08-15.md`.

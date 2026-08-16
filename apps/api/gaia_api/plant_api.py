@@ -27,6 +27,7 @@ async def post_plant(
     location_id: str | None = None,
     growing_method: str | None = None,
     tags: list[str] | None = None,
+    is_demo: bool = False,
 ) -> dict:
     lookup = await botanist.resolve_taxon(context, taxon_query)
     if lookup.plant_entity is None:
@@ -45,6 +46,7 @@ async def post_plant(
             location_id=location_id,
             growing_method=growing_method,
             tags=tags or [],
+            is_demo=is_demo,
         )
     )
     return {

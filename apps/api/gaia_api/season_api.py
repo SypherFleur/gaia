@@ -25,6 +25,7 @@ async def post_season_plan(
     weather_forecast_context: dict | None = None,
     use_model: bool = False,
     include_mercator: bool = False,
+    is_demo: bool = False,
 ) -> dict:
     request = SeasonPlanRequest(
         workspace_id=workspace_id,
@@ -46,6 +47,13 @@ async def post_season_plan(
         include_mercator=include_mercator,
     )
     plan, actions, model_run_ids = await season.create_plan(context, request, season_context)
+    if is_demo:
+        plan.is_demo = True
+        season.repository.connection.execute(
+            "UPDATE season_plans SET is_demo = 1 WHERE organization_id = ? AND id = ?",
+            (context.organization_id, plan.id),
+        )
+        season.repository.connection.commit()
     return {"season_plan": asdict(plan), "actions": [asdict(action) for action in actions], "model_run_ids": model_run_ids}
 
 

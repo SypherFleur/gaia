@@ -164,7 +164,7 @@ function renderObjectList(type) {
     items.forEach((item) => {
       const row = document.createElement("button");
       row.className = "obj-row";
-      row.innerHTML = `<span class="primary">${escapeHtml(type.label(item))}</span><span class="secondary">${escapeHtml(type.sub(item) || "")}</span>`;
+      row.innerHTML = `<span class="primary">${escapeHtml(type.label(item))} ${demoBadge(item)}</span><span class="secondary">${escapeHtml(type.sub(item) || "")}</span>`;
       row.addEventListener("click", () => select(type.id, item));
       list.appendChild(row);
     });
@@ -217,7 +217,7 @@ function renderPlanning(canvas) {
         object: plan,
         type: "season_plan",
         cells: [
-          { text: plan.name || "Season plan", className: "text" },
+          { html: `${escapeHtml(plan.name || "Season plan")} ${demoBadge(plan)}`, className: "text" },
           { text: `${plan.start_date || "?"} → ${plan.end_date || "?"}` },
           { html: `<span class="badge ${plan.status === "draft" ? "warn" : "ok"}">${escapeHtml(plan.status || "unknown")}</span>` },
           { text: plan.confidence == null ? "—" : String(plan.confidence) },
@@ -508,11 +508,19 @@ function renderInspector() {
   const object = selection.data;
 
   $("#insp-type").textContent = type ? type.name : selection.type;
-  $("#insp-title").textContent = type ? type.label(object) : "Object";
+  $("#insp-title").innerHTML = `${escapeHtml(type ? type.label(object) : "Object")} ${demoBadge(object)}`;
   $("#insp-id").textContent = object.id || "";
 
   const body = $("#insp-body");
   body.innerHTML = "";
+
+  if (object.is_demo) {
+    const note = document.createElement("div");
+    note.className = "demo-note";
+    note.textContent =
+      "Seeded sample content, created by \"Seed demo\" so the workspace is not empty. Not something you recorded, and not a provider reading.";
+    body.appendChild(inspectorSection("Demo object", note));
+  }
 
   body.appendChild(inspectorSection("Properties", propertyList(object)));
 
@@ -759,6 +767,12 @@ async function seedDemo() {
 }
 
 /* ---------------- primitives ---------------- */
+
+function demoBadge(object) {
+  // Seeded sample content must be visually distinct from records the user
+  // created; without this a demo tomato is indistinguishable from a real one.
+  return object && object.is_demo ? `<span class="badge demo">demo</span>` : "";
+}
 
 function panelElement(heading) {
   const panel = document.createElement("section");

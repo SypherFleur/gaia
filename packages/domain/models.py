@@ -207,6 +207,7 @@ class UserPlant(EntityMetadata):
     notes: str = ""
     tags: list[str] = field(default_factory=list)
     archived_at: str | None = None
+    is_demo: bool = False
 
 
 @dataclass(slots=True)
@@ -889,6 +890,7 @@ class SeasonPlan(EntityMetadata):
     version: int = 1
     supersedes_plan_id: str | None = None
     generated_at: str = field(default_factory=now_iso)
+    is_demo: bool = False
 
 
 @dataclass(slots=True)
