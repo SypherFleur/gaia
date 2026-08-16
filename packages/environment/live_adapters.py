@@ -159,8 +159,14 @@ class USDASoilDataAccessAdapter:
     async def soil_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
         return await asyncio.to_thread(self._soil_context_sync, latitude, longitude)
 
+    def request_body(self, latitude: float, longitude: float) -> dict:
+        # Soil Data Access POST REST takes lowercase `query` and `format` only.
+        # Uppercase keys, or a `SERVICE` key (which belongs to the older
+        # SDMTabularService endpoint), are rejected with HTTP 400.
+        return {"query": self.build_query(latitude, longitude), "format": "JSON+COLUMNNAME"}
+
     def _soil_context_sync(self, latitude: float, longitude: float) -> EnvironmentalProviderResult:
-        body = json.dumps({"SERVICE": "query", "FORMAT": "JSON+COLUMNNAME", "QUERY": self.build_query(latitude, longitude)}).encode("utf-8")
+        body = json.dumps(self.request_body(latitude, longitude)).encode("utf-8")
         request = urllib.request.Request(
             self.base_url,
             data=body,
@@ -170,7 +176,9 @@ class USDASoilDataAccessAdapter:
         try:
             payload = request_json(request, timeout_seconds=self.timeout_seconds)
         except urllib.error.HTTPError as exc:
-            return self._unavailable(f"ssurgo_http_{exc.code}", {})
+            # SDA returns the rejection reason in the body; without it a 400 is
+            # undiagnosable from the status code alone.
+            return self._unavailable(f"ssurgo_http_{exc.code}: {_error_detail(exc)}", {})
         except RetryExhausted as exc:
             return self._unavailable(f"ssurgo_error:{exc.last_error.__class__.__name__}", {})
         return self.normalize_mapunit_response(payload, self.base_url)
@@ -178,14 +186,18 @@ class USDASoilDataAccessAdapter:
     def build_query(self, latitude: float, longitude: float) -> str:
         # ~11 m precision: far finer than any SSURGO map unit, so this costs no
         # accuracy while keeping full-precision coordinates off the wire.
-        point = f"point({round(longitude, 4)} {round(latitude, 4)})"
+        point = f"POINT({round(longitude, 4)} {round(latitude, 4)})"
+        # Texture is not a chorizon column — it lives in chtexturegrp.texdesc.
+        # Selecting ch.texture is an invalid-column error, which SDA answers
+        # with HTTP 400.
         return (
             "SELECT TOP 1 mu.muname, c.compname, c.drainagecl, c.hydgrp, c.slope_l, c.slope_h, "
-            "ch.texture, ch.ph1to1h2o_r, ch.awc_r, ch.om_r, cr.resdept_r "
+            "ctg.texdesc, ch.ph1to1h2o_r, ch.awc_r, ch.om_r, cr.resdept_r "
             f"FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('{point}') AS m "
             "INNER JOIN mapunit mu ON mu.mukey = m.mukey "
             "INNER JOIN component c ON c.mukey = mu.mukey AND c.majcompflag = 'Yes' "
             "LEFT OUTER JOIN chorizon ch ON ch.cokey = c.cokey AND ch.hzdept_r = 0 "
+            "LEFT OUTER JOIN chtexturegrp ctg ON ctg.chkey = ch.chkey AND ctg.rvindicator = 'Yes' "
             "LEFT OUTER JOIN corestrictions cr ON cr.cokey = c.cokey "
             "ORDER BY c.comppct_r DESC"
         )
@@ -201,7 +213,9 @@ class USDASoilDataAccessAdapter:
             "drainage_class": row.get("drainagecl"),
             "hydrologic_soil_group": row.get("hydgrp"),
             "available_water_capacity": {"value": _sda_number(row.get("awc_r")), "evidence_type": "SURVEY"},
-            "texture": {"value": row.get("texture"), "evidence_type": "SURVEY"},
+            # Accept either key: texdesc is what SDA returns, texture is kept
+            # so a pre-existing caller or cached payload still normalizes.
+            "texture": {"value": row.get("texdesc") or row.get("texture"), "evidence_type": "SURVEY"},
             "organic_matter": {"value": _sda_number(row.get("om_r")), "evidence_type": "SURVEY"},
             "ph": {"value": _sda_number(row.get("ph1to1h2o_r")), "evidence_type": "SURVEY"},
             "slope": {"value": _slope_range(row), "evidence_type": "SURVEY"},
@@ -374,6 +388,15 @@ def _latest_reading(entry: dict) -> dict | None:
         return None
     unit = ((entry.get("variable") or {}).get("unit") or {}).get("unitCode")
     return {"value": number, "unit": unit, "observed_at": latest.get("dateTime"), "evidence_type": "OBSERVED"}
+
+
+def _error_detail(exc: urllib.error.HTTPError, *, limit: int = 300) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+    collapsed = " ".join(body.split())
+    return collapsed[:limit]
 
 
 def _sda_rows(payload: dict) -> list[dict]:

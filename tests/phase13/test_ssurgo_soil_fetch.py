@@ -67,7 +67,7 @@ class SSURGOSoilFetchTest(unittest.TestCase):
     def test_query_reduces_coordinate_precision(self) -> None:
         query = USDASoilDataAccessAdapter().build_query(30.26721899, -97.74312345)
 
-        self.assertIn("point(-97.7431 30.2672)", query)
+        self.assertIn("POINT(-97.7431 30.2672)", query)
         self.assertNotIn("30.26721899", query)
         self.assertNotIn("-97.74312345", query)
 

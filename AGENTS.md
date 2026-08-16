@@ -49,7 +49,7 @@ python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 de
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **444 tests, 0 failures, 8 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
+Baseline as of 2026-08-15: **463 tests, 0 failures, 9 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 

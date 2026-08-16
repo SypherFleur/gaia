@@ -331,13 +331,10 @@ def handle_providers_verify(args: argparse.Namespace) -> JsonDict:
     # or make a broken one look fine.
     from packages.providers.verification import PROBE_LATITUDE, PROBE_LONGITUDE, summarize, verify_live_providers
 
-    results = _run(
-        verify_live_providers(
-            latitude=args.latitude if args.latitude is not None else PROBE_LATITUDE,
-            longitude=args.longitude if args.longitude is not None else PROBE_LONGITUDE,
-        )
-    )
-    return summarize(results)
+    latitude = args.latitude if args.latitude is not None else PROBE_LATITUDE
+    longitude = args.longitude if args.longitude is not None else PROBE_LONGITUDE
+    results = _run(verify_live_providers(latitude=latitude, longitude=longitude))
+    return summarize(results, latitude=latitude, longitude=longitude)
 
 
 def handle_sources_list(args: argparse.Namespace) -> JsonDict:

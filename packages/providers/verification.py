@@ -27,6 +27,7 @@ class ProbeResult:
     label: str
     outcome: str
     detail: str = ""
+    warnings: list[str] = field(default_factory=list)
     sample: JsonDict = field(default_factory=dict)
 
     def to_dict(self) -> JsonDict:
@@ -39,7 +40,13 @@ async def _probe(provider_id: str, label: str, call: Callable[[], Awaitable[Any]
     except Exception as exc:  # a probe must never take the command down
         return ProbeResult(provider_id, label, "ERROR", f"{exc.__class__.__name__}: {exc}")
     outcome, detail, sample = describe(result)
-    return ProbeResult(provider_id, label, outcome, detail, sample)
+    # Semantic caveats travel with a successful result and must stay visible;
+    # they are never evidence that a provider failed.
+    return ProbeResult(provider_id, label, outcome, detail, _semantic_warnings(result), sample)
+
+
+def _semantic_warnings(result: Any) -> list[str]:
+    return [str(item) for item in (getattr(result, "warnings", None) or [])]
 
 
 def _status_of(result: Any) -> str:
@@ -62,6 +69,13 @@ def _reason_of(result: Any) -> str:
     return str(data.get("semantic_note") or "")
 
 
+# Statuses that mean the provider answered usefully. Subsystems use different
+# vocabularies: environment/research report AVAILABLE, taxonomy reports the
+# resolution kind. A taxonomy match is a success, not a missing AVAILABLE.
+_SUCCESS_STATUSES = frozenset({"AVAILABLE", "ACCEPTED", "SYNONYM", "AMBIGUOUS", "CACHE_HIT"})
+_NO_DATA_STATUSES = frozenset({"UNRESOLVED", "UNAVAILABLE", "UNSUPPORTED_LOCATION"})
+
+
 # Markers that mean the request never completed. An unreachable endpoint is a
 # transport failure, not "the provider answered and had nothing" — conflating
 # them would make a total outage look like normal fail-closed behavior, which
@@ -75,11 +89,13 @@ def _is_transport_failure(reason: str) -> bool:
 
 
 def _outcome_for(result: Any, evidence: JsonDict) -> tuple[str, str, JsonDict]:
-    status = _status_of(result)
-    if status == "AVAILABLE":
+    status = _status_of(result).upper()
+    if status in _SUCCESS_STATUSES:
+        # Warnings are reported separately; a semantic caveat riding along with
+        # a good response never downgrades the outcome.
         return "OK", "", evidence
     reason = _reason_of(result)
-    if status in {"UNRESOLVED", "UNAVAILABLE"}:
+    if status in _NO_DATA_STATUSES:
         if _is_transport_failure(reason):
             return "FAILED", reason, {}
         # Genuine fail-closed: the provider responded and had nothing here.
@@ -145,7 +161,23 @@ async def verify_live_providers(*, latitude: float = PROBE_LATITUDE, longitude: 
     return list(await asyncio.gather(*(_probe(provider_id, label, call, describe) for provider_id, label, call, describe in probes)))
 
 
-def summarize(results: list[ProbeResult]) -> JsonDict:
+def probe_coordinate(latitude: float, longitude: float) -> JsonDict:
+    """Describe the health-check coordinate so it cannot be mistaken for context.
+
+    This is a fixed diagnostic point. It is never the user's device or saved
+    location, is never persisted, and must not be read as geographic context
+    for any guidance.
+    """
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "purpose": "provider_health_check",
+        "is_user_location": False,
+        "note": "Fixed diagnostic coordinate for provider health only. Not device location, not a saved location, not persisted, and not geographic context for guidance.",
+    }
+
+
+def summarize(results: list[ProbeResult], *, latitude: float = PROBE_LATITUDE, longitude: float = PROBE_LONGITUDE) -> JsonDict:
     counts: dict[str, int] = {}
     for result in results:
         counts[result.outcome] = counts.get(result.outcome, 0) + 1
@@ -154,6 +186,7 @@ def summarize(results: list[ProbeResult]) -> JsonDict:
         "ok": counts.get("OK", 0),
         "no_data": counts.get("NO_DATA", 0),
         "failed": counts.get("FAILED", 0) + counts.get("ERROR", 0),
+        "probe_coordinate": probe_coordinate(latitude, longitude),
         "providers": [result.to_dict() for result in results],
-        "note": "OK means a real response parsed into GAIA's contract. NO_DATA means the provider answered but had nothing for this coordinate, which is correct fail-closed behavior. FAILED or ERROR means the endpoint was unreachable or its schema drifted.",
+        "note": "OK means a real response parsed into GAIA's contract; any warnings are semantic caveats, not failures. NO_DATA means the provider answered but had nothing for the probe coordinate, which is correct fail-closed behavior. FAILED or ERROR means the endpoint was unreachable or its schema drifted.",
     }

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed the SSURGO live request, which returned HTTP 400 against the real endpoint for two independent reasons: the POST body used uppercase `SERVICE`/`FORMAT`/`QUERY` keys belonging to the older SDMTabularService endpoint instead of the POST REST contract's lowercase `query`/`format`, and the query selected `ch.texture`, which is not a `chorizon` column (texture lives in `chtexturegrp.texdesc`). WKT is now uppercase `POINT(...)`, the normalizer accepts either texture key, and an SDA rejection now surfaces the response body so a 400 is diagnosable from the status alone.
+- Fixed `providers verify` misreporting GBIF as FAILED. Taxonomy resolutions report `ACCEPTED`/`SYNONYM`/`AMBIGUOUS`, never `AVAILABLE`, so a successful match fell through to the failure branch and displayed its always-present semantic caveat as the failure reason. Outcome classification now recognizes each subsystem's success vocabulary.
+- `providers verify` now reports `warnings` separately from failure `detail`, so semantic caveats stay visible on an OK result instead of being mistaken for errors.
+- `providers verify` now labels its fixed health-check coordinate (`probe_coordinate` with `purpose: provider_health_check` and `is_user_location: false`) so it can never be read as user or device context.
+
 - Added `gaia providers verify`: probes all eight keyless live providers against their real endpoints in one command (real network, no keys, no writes, no spend), reporting per provider whether a real response parsed into GAIA's contract, the provider answered with no coverage for the coordinate, or the endpoint failed. Transport failures are never reported as no-coverage, since conflating them would make an outage look like normal fail-closed behavior.
 - Gave `GBIFApiAdapter` the same fail-closed error handling as its sibling adapters; it previously let network errors propagate as raw exceptions instead of a `PROVIDER_ERROR` resolution.
 
