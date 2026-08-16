@@ -137,21 +137,29 @@ class ProtocolThreeServerTest(unittest.TestCase):
                 javascript = get_text(f"http://127.0.0.1:{port}/app.js")
                 stylesheet = get_text(f"http://127.0.0.1:{port}/styles.css")
 
-                self.assertIn("GAIA Local Alpha", html)
-                self.assertIn('data-view="chat"', html)
-                self.assertIn("Location required", html)
-                self.assertIn("Use current location", html)
-                self.assertIn("Enter location", html)
-                self.assertIn("/api/v1/chat/stream", javascript)
+                # Shell: ontology explorer, three pillars, inspector.
+                self.assertIn("GAIA Workbench", html)
+                self.assertIn('data-pillar="planning"', html)
+                self.assertIn('data-pillar="evidence"', html)
+                self.assertIn('data-pillar="identify"', html)
+                self.assertIn('id="object-types"', html)
+                self.assertIn('id="inspector"', html)
+                self.assertIn("Use device", html)
+
+                # The console must keep surfacing cost posture, provenance, and
+                # the fact that deterministic routes cost no model run.
                 self.assertIn("/api/v1/seed/demo", javascript)
                 self.assertIn("source_kind: \"device\"", javascript)
-                self.assertIn("environmentCard", javascript)
-                self.assertIn("environment_report", javascript)
                 self.assertIn("automatic_paid_usage_enabled", javascript)
-                self.assertIn(".app-shell", stylesheet)
-                self.assertIn(".location-status", stylesheet)
-                self.assertIn(".environment-card", stylesheet)
-                self.assertNotIn("Core chat and context diagnostics", html)
+                self.assertIn("source_record_ids", javascript)
+                self.assertIn("model_run_count", javascript)
+                self.assertIn("/api/v1/source-records", javascript)
+                self.assertIn(".shell", stylesheet)
+                self.assertIn(".inspector", stylesheet)
+                self.assertIn(".provenance", stylesheet)
+
+                # Absent data must never render as a blank or a default.
+                self.assertIn("unavailable", javascript)
                 self.assertNotIn("static demo", javascript.lower())
             finally:
                 stop_server(process)

@@ -1,785 +1,839 @@
-const state = {
-  status: null,
-  identity: null,
-  system: null,
-  locations: null,
-  activeLocationId: null,
-  plants: [],
-  selectedPlantId: null,
-  lastMediaId: null,
-  lastSeasonPlanId: null,
-  lastConversationId: null,
-};
-
-const views = {
-  chat: { title: "Chat", subtitle: "Ask GAIA with local context and visible provenance." },
-  plants: { title: "Plants", subtitle: "Workspace records, observations, and plant-aware actions." },
-  vision: { title: "Vision", subtitle: "Local image evidence with observations kept separate from hypotheses." },
-  season: { title: "Season", subtitle: "Internal planning with optional calendar preview." },
-  research: { title: "Research", subtitle: "Evidence search, contradictions, applicability, and citations." },
-  movement: { title: "Movement", subtitle: "U.S. movement decision support with currentness and authority notes." },
-  markets: { title: "Markets", subtitle: "Dated production and market context." },
-  system: { title: "Settings", subtitle: "Runtime, provider, cost, and persistence status." },
-};
+/* GAIA ontology workbench.
+ *
+ * Design rules this file follows:
+ *  - The ontology is the navigation. Objects are selected, then acted on.
+ *  - Nothing is rendered as fact without its provenance reachable in one click.
+ *  - Absent data renders as an explicit "unavailable", never as a blank or a
+ *    plausible-looking default. GAIA's whole value is that it does not guess.
+ */
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
+const state = {
+  pillar: "planning",
+  system: null,
+  identity: null,
+  locations: { locations: [], active_location: null, active_location_id: null },
+  plants: [],
+  seasonPlans: [],
+  selection: null, // { type, id, data }
+  sourceCache: new Map(),
+  objectTypes: [],
+  lastResearch: null,
+  lastMovement: null,
+  lastMarket: null,
+  lastVision: null,
+  lastEnvironment: null,
+  modelRuns: 0,
+};
+
+/* ---------------- ontology definition ----------------
+ * Types mirror packages/domain. Each knows how to list and label itself so the
+ * explorer and inspector stay generic. */
+
+const ONTOLOGY = [
+  { id: "location", glyph: "◎", name: "Location", pillar: "identify",
+    list: () => state.locations.locations || [],
+    label: (o) => o.label || "Location",
+    sub: (o) => [o.admin2, o.admin1].filter(Boolean).join(", ") || o.id.slice(0, 8) },
+  { id: "plant", glyph: "❧", name: "Plant", pillar: "identify",
+    list: () => state.plants,
+    label: (o) => o.nickname || o.cultivar || "Plant",
+    sub: (o) => o.lifecycle_stage || "unknown stage" },
+  { id: "season_plan", glyph: "▤", name: "Season plan", pillar: "planning",
+    list: () => state.seasonPlans,
+    label: (o) => o.name || "Season plan",
+    sub: (o) => `${o.start_date || "?"} → ${o.end_date || "?"}` },
+  { id: "research_work", glyph: "❡", name: "Research work", pillar: "evidence",
+    list: () => (state.lastResearch && state.lastResearch.works) || [],
+    label: (o) => o.title || "Untitled work",
+    sub: (o) => [o.publication_year, o.journal].filter(Boolean).join(" · ") || o.provider_id || "" },
+  { id: "source_record", glyph: "⛓", name: "Source record", pillar: "evidence",
+    list: () => Array.from(state.sourceCache.values()),
+    label: (o) => o.title || o.authority || o.provider || "Source",
+    sub: (o) => o.provider || "" },
+];
+
+const PILLAR_TYPES = {
+  planning: ["season_plan", "location", "plant"],
+  evidence: ["research_work", "source_record"],
+  identify: ["plant", "location"],
+};
+
+/* ---------------- boot ---------------- */
+
 document.addEventListener("DOMContentLoaded", () => {
-  bindNavigation();
-  bindForms();
+  bindShell();
+  renderPillar();
   refreshAll();
 });
 
-function bindNavigation() {
-  $$(".nav-item").forEach((button) => {
-    button.addEventListener("click", () => showView(button.dataset.view));
+function bindShell() {
+  $$(".pillar").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.pillar = button.dataset.pillar;
+      $$(".pillar").forEach((other) => other.classList.toggle("active", other === button));
+      renderObjectTypes();
+      renderPillar();
+    });
   });
-  $("#refresh").addEventListener("click", refreshAll);
-  $("#seed-demo").addEventListener("click", seedDemo);
-  $("#device-location").addEventListener("click", useDeviceLocation);
-  $("#manual-location").addEventListener("click", enterManualLocation);
-  $("#ask-about-plant").addEventListener("click", () => {
-    showView("chat");
-    $("#chat-input").value = "What should I do for this plant today?";
-    $("#chat-input").focus();
-  });
-}
-
-function bindForms() {
-  $("#plant-select").addEventListener("change", (event) => {
-    state.selectedPlantId = event.target.value || null;
-    renderSelectedPlant();
-  });
-  $("#location-select").addEventListener("change", setActiveLocationFromSelect);
-  $("#chat-form").addEventListener("submit", submitChat);
-  $("#plant-form").addEventListener("submit", submitPlant);
-  $("#observation-form").addEventListener("submit", submitObservation);
-  $("#vision-file").addEventListener("change", previewVisionFile);
-  $("#vision-run").addEventListener("click", runVision);
-  $("#season-form").addEventListener("submit", submitSeason);
-  seedSeasonDateDefaults();
-  $("#calendar-preview").addEventListener("click", previewCalendar);
-  $("#research-form").addEventListener("submit", submitResearchSearch);
-  $("#research-synthesize").addEventListener("click", synthesizeResearch);
-  $("#movement-form").addEventListener("submit", submitMovement);
-  $("#markets-form").addEventListener("submit", submitMarkets);
-}
-
-function showView(viewName) {
-  $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
-  $$(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
-  $("#view-title").textContent = views[viewName].title;
-  $("#view-subtitle").textContent = views[viewName].subtitle;
+  $("#agent-form").addEventListener("submit", submitAgent);
+  $("#btn-seed").addEventListener("click", seedDemo);
+  $("#btn-system").addEventListener("click", showSystem);
+  $("#btn-geolocate").addEventListener("click", useDeviceLocation);
+  $("#btn-manual-location").addEventListener("click", enterLocation);
+  $("#location-select").addEventListener("change", activateSelectedLocation);
 }
 
 async function refreshAll() {
   try {
-    const [status, identity, system, locations, plants] = await Promise.all([
-      api("/api/v1/status"),
-      api("/api/v1/dev-identity"),
+    const [system, identity, locations, plants, plans] = await Promise.all([
       api("/api/v1/system"),
+      api("/api/v1/dev-identity"),
       api("/api/v1/locations"),
       api("/api/v1/plants"),
+      api("/api/v1/season/plans").catch(() => ({ season_plans: [] })),
     ]);
-    state.status = status;
-    state.identity = identity;
     state.system = system;
+    state.identity = identity;
     state.locations = locations;
-    state.activeLocationId = locations.active_location_id || identity.primary_location_id || null;
-    state.plants = Array.isArray(plants) ? plants : [];
-    if (!state.selectedPlantId && state.plants.length) state.selectedPlantId = state.plants[0].id;
-    renderStatus();
-    renderLocations();
-    renderPlants();
-    renderSelectedPlant();
-    renderSystem();
+    state.plants = plants || [];
+    state.seasonPlans = (plans && plans.season_plans) || [];
+    renderTopbar();
+    renderLocationSelect();
+    renderObjectTypes();
+    renderPillar();
   } catch (error) {
-    toast(`Refresh failed: ${error.message}`);
+    toast(readableError(error), true);
   }
 }
 
-async function seedDemo() {
-  try {
-    const result = await api("/api/v1/seed/demo", { method: "POST", body: {} });
-    toast(`Seeded ${result.plant_count} plant and ${result.guidance_plan_count} GuidancePlan.`);
-    await refreshAll();
-  } catch (error) {
-    toast(`Seed failed: ${error.message}`);
-  }
+/* ---------------- topbar ---------------- */
+
+function renderTopbar() {
+  const system = state.system || {};
+  const active = state.locations.active_location;
+  $("#stat-location").textContent = active
+    ? [active.admin2, active.admin1].filter(Boolean).join(", ") || active.label
+    : "none";
+
+  const providers = system.providers || [];
+  const live = providers.filter((p) => p.mode === "live").length;
+  const enabled = providers.filter((p) => p.enabled).length;
+  $("#stat-providers").textContent = `${live} live / ${enabled} on`;
+
+  const cost = system.cost || {};
+  $("#stat-spend").textContent = `$${Number(cost.total_development_cash_spent || 0).toFixed(2)}`;
+  $("#stat-modelruns").textContent = String(state.modelRuns);
+
+  const mode = $("#stat-mode");
+  const paid = cost.automatic_paid_usage_enabled;
+  mode.textContent = paid ? "paid enabled" : "$0 automatic";
+  mode.className = `badge ${paid ? "bad" : "ok"}`;
 }
 
-async function setActiveLocationFromSelect(event) {
-  const locationId = event.target.value || null;
-  if (!locationId) {
-    state.activeLocationId = null;
-    toast("No active location selected.");
-    return;
-  }
-  try {
-    const result = await api("/api/v1/locations/active", { method: "POST", body: { location_id: locationId } });
-    state.activeLocationId = result.active_location?.id || locationId;
-    toast(locationToast(result.active_location));
-    await refreshAll();
-  } catch (error) {
-    toast(readableError(error));
-  }
-}
+/* ---------------- ontology explorer ---------------- */
 
-async function useDeviceLocation() {
-  if (!navigator.geolocation) return toast("Browser geolocation is unavailable.");
-  $("#device-location").disabled = true;
-  try {
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 600000 });
+function renderObjectTypes() {
+  const container = $("#object-types");
+  const relevant = PILLAR_TYPES[state.pillar] || [];
+  container.innerHTML = "";
+  ONTOLOGY.filter((type) => relevant.includes(type.id)).forEach((type) => {
+    const items = type.list();
+    const button = document.createElement("button");
+    button.className = "object-type" + (state.selection && state.selection.type === type.id ? " active" : "");
+    button.innerHTML = `<span class="glyph">${type.glyph}</span><span class="name">${type.name}</span><span class="count">${items.length}</span>`;
+    button.addEventListener("click", () => {
+      renderObjectList(type);
     });
-    const { latitude, longitude, accuracy } = position.coords;
-    const result = await api("/api/v1/locations/active", {
-      method: "POST",
-      body: {
-        source_kind: "device",
-        label: "Device location",
-        latitude,
-        longitude,
-        accuracy_m: accuracy,
-      },
-    });
-    state.activeLocationId = result.active_location?.id || null;
-    toast(locationToast(result.active_location));
-    await refreshAll();
-  } catch (error) {
-    toast(error.message || "Location permission was not granted.");
-  } finally {
-    $("#device-location").disabled = false;
-  }
-}
-
-async function enterManualLocation() {
-  const coordinateText = window.prompt("Enter latitude and longitude, separated by a comma.");
-  if (!coordinateText) return;
-  const [latitudeText, longitudeText] = coordinateText.split(",").map((item) => item.trim());
-  const latitude = Number(latitudeText);
-  const longitude = Number(longitudeText);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return toast("Enter coordinates like 29.7604, -95.3698.");
-  }
-  const label = window.prompt("Name this location.", "Manual location") || "Manual location";
-  try {
-    const result = await api("/api/v1/locations/active", {
-      method: "POST",
-      body: {
-        source_kind: "manual",
-        label,
-        latitude,
-        longitude,
-      },
-    });
-    state.activeLocationId = result.active_location?.id || null;
-    toast(locationToast(result.active_location));
-    await refreshAll();
-  } catch (error) {
-    toast(readableError(error));
-  }
-}
-
-async function submitChat(event) {
-  event.preventDefault();
-  const text = $("#chat-input").value.trim();
-  if (!text) return;
-  appendMessage("user", text);
-  const imageFile = $("#chat-image").files[0];
-  if (imageFile) await uploadAndAnalyzeImage(imageFile, "chat");
-  const assistant = appendMessage("assistant", "");
-  $("#chat-route").textContent = "routing";
-  $("#chat-model-runs").textContent = "0";
-  $("#chat-source-count").textContent = "0";
-  $("#guidance-card").textContent = "Waiting for GAIA...";
-  try {
-    await streamChat(text, assistant);
-    $("#chat-input").value = "";
-    $("#chat-image").value = "";
-  } catch (error) {
-    assistant.textContent = readableError(error);
-    $("#chat-route").textContent = "error";
-  }
-}
-
-async function streamChat(message, node) {
-  const response = await fetch("/api/v1/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      location_id: activeLocationId(),
-      user_plant_id: state.selectedPlantId,
-      conversation_id: state.lastConversationId,
-    }),
+    container.appendChild(button);
   });
-  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
-    for (const part of parts) handleStreamEvent(part, node);
-  }
-  if (buffer.trim()) handleStreamEvent(buffer, node);
 }
 
-function handleStreamEvent(raw, node) {
-  const dataLine = raw.split("\n").find((line) => line.startsWith("data: "));
-  if (!dataLine) return;
-  const event = JSON.parse(dataLine.slice(6));
-  if (event.event === "route") {
-    $("#chat-route").textContent = event.route;
-    $("#chat-model-runs").textContent = String(event.model_run_count);
-  }
-  if (event.event === "token") {
-    node.textContent += event.text;
-  }
-  if (event.event === "final") {
-    const result = event.data;
-    state.lastConversationId = result.conversation_id;
-    $("#chat-route").textContent = result.route;
-    $("#chat-model-runs").textContent = String(result.model_run_count);
-    const sourceIds = result.source_record_ids || result.context_bundle?.source_record_ids || [];
-    $("#chat-source-count").textContent = String(sourceIds.length);
-    renderGuidance(result);
-    renderSourceChips(sourceIds);
-    refreshAll();
-  }
-}
-
-async function submitPlant(event) {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  try {
-    const result = await api("/api/v1/plants", {
-      method: "POST",
-      body: {
-        taxon: data.get("taxon"),
-        nickname: data.get("nickname"),
-        cultivar: data.get("cultivar"),
-        location_id: activeLocationId(),
-        lifecycle_stage: "vegetative",
-      },
+function renderObjectList(type) {
+  const items = type.list();
+  const panel = panelElement(`${type.name} — ${items.length}`);
+  const body = panel.querySelector(".panel-body");
+  body.classList.add("tight");
+  if (!items.length) {
+    body.innerHTML = `<div class="empty-state">No ${type.name.toLowerCase()} objects yet.</div>`;
+  } else {
+    const list = document.createElement("div");
+    list.className = "obj-list";
+    items.forEach((item) => {
+      const row = document.createElement("button");
+      row.className = "obj-row";
+      row.innerHTML = `<span class="primary">${escapeHtml(type.label(item))}</span><span class="secondary">${escapeHtml(type.sub(item) || "")}</span>`;
+      row.addEventListener("click", () => select(type.id, item));
+      list.appendChild(row);
     });
-    state.selectedPlantId = result.plant?.id;
-    toast("Plant created.");
-    await refreshAll();
-  } catch (error) {
-    toast(readableError(error));
+    body.appendChild(list);
   }
+  const canvas = $("#canvas");
+  canvas.innerHTML = "";
+  canvas.appendChild(panel);
 }
 
-async function submitObservation(event) {
-  event.preventDefault();
-  if (!state.selectedPlantId) return toast("Select a plant first.");
-  const data = new FormData(event.currentTarget);
-  try {
-    await api(`/api/v1/plants/${state.selectedPlantId}/observations`, {
-      method: "POST",
-      body: { text: data.get("text"), observed_facts: [{ label: data.get("text"), source: "manual alpha" }] },
-    });
-    toast("Observation added.");
-    await renderSelectedPlant();
-  } catch (error) {
-    toast(readableError(error));
+/* ---------------- pillars ---------------- */
+
+function renderPillar() {
+  const canvas = $("#canvas");
+  canvas.innerHTML = "";
+  if (state.pillar === "planning") renderPlanning(canvas);
+  else if (state.pillar === "evidence") renderEvidence(canvas);
+  else renderIdentify(canvas);
+}
+
+/* --- Pillar 1: Planning --- */
+
+function renderPlanning(canvas) {
+  const form = panelElement("Generate season plan");
+  form.querySelector(".panel-body").innerHTML = `
+    <div class="row">
+      <div class="field"><label>Crops</label><input id="plan-crops" value="tomato" /></div>
+      <div class="field"><label>Objective</label><input id="plan-goal" value="Plan the coming season" /></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Start (blank = today)</label><input id="plan-start" type="date" /></div>
+      <div class="field"><label>End (blank = horizon)</label><input id="plan-end" type="date" /></div>
+      <button class="btn primary" id="plan-run">Build plan</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:11px">
+      Dates are derived from today when left blank. Calendar writes require an explicit preview and commit.
+    </p>`;
+  canvas.appendChild(form);
+  $("#plan-run").addEventListener("click", buildSeasonPlan);
+
+  const plansPanel = panelElement(`Season plans — ${state.seasonPlans.length}`);
+  const body = plansPanel.querySelector(".panel-body");
+  body.classList.add("tight");
+  if (!state.seasonPlans.length) {
+    body.innerHTML = `<div class="empty-state">No season plans yet.<div class="hint">Build one above, or ask the agent to plan a season.</div></div>`;
+  } else {
+    body.appendChild(objectTable(
+      ["Plan", "Window", "Status", "Confidence"],
+      state.seasonPlans.map((plan) => ({
+        object: plan,
+        type: "season_plan",
+        cells: [
+          { text: plan.name || "Season plan", className: "text" },
+          { text: `${plan.start_date || "?"} → ${plan.end_date || "?"}` },
+          { html: `<span class="badge ${plan.status === "draft" ? "warn" : "ok"}">${escapeHtml(plan.status || "unknown")}</span>` },
+          { text: plan.confidence == null ? "—" : String(plan.confidence) },
+        ],
+      }))
+    ));
   }
+  canvas.appendChild(plansPanel);
 }
 
-async function runVision() {
-  const file = $("#vision-file").files[0] || $("#chat-image").files[0];
-  if (!file) return toast("Choose an image.");
-  await uploadAndAnalyzeImage(file, "vision");
-}
-
-async function uploadAndAnalyzeImage(file, origin) {
-  if (!state.selectedPlantId) return toast("Select a plant first.");
-  const imageBase64 = await fileToBase64(file);
-  $("#vision-status").textContent = "uploading";
-  const media = await api("/api/v1/vision/media", {
-    method: "POST",
-    body: {
-      image_base64: imageBase64,
-      content_type: file.type || "image/jpeg",
-      user_plant_id: state.selectedPlantId,
-    },
-  });
-  state.lastMediaId = media.id;
-  $("#vision-status").textContent = "analyzing";
-  const analysis = await api("/api/v1/vision/analyze", {
-    method: "POST",
-    body: {
-      media_attachment_id: media.id,
-      user_plant_id: state.selectedPlantId,
-      location_id: activeLocationId(),
-    },
-  });
-  renderVision(analysis);
-  if (origin === "chat") appendMessage("assistant", `Image analysis status: ${analysis.provider_status}`);
-  await renderSelectedPlant();
-}
-
-function seedSeasonDateDefaults() {
-  const startInput = document.querySelector("#season-form input[name='start']");
-  const endInput = document.querySelector("#season-form input[name='end']");
-  if (!startInput || !endInput) return;
-  const today = new Date();
-  const end = new Date(today);
-  end.setDate(end.getDate() + 90);
-  const iso = (value) => value.toISOString().slice(0, 10);
-  if (!startInput.value) startInput.value = iso(today);
-  if (!endInput.value) endInput.value = iso(end);
-}
-
-async function submitSeason(event) {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
+async function buildSeasonPlan() {
+  const crops = String($("#plan-crops").value || "").split(",").map((s) => s.trim()).filter(Boolean);
   try {
     const result = await api("/api/v1/season/plan", {
       method: "POST",
       body: {
-        crop_names: String(data.get("crops")).split(",").map((item) => item.trim()).filter(Boolean),
-        objective: data.get("goal"),
-        start_date: data.get("start") || null,
-        end_date: data.get("end") || null,
-        location_id: activeLocationId(),
+        crop_names: crops,
+        objective: $("#plan-goal").value,
+        start_date: $("#plan-start").value || null,
+        end_date: $("#plan-end").value || null,
+        location_id: state.locations.active_location_id,
         include_mercator: true,
       },
     });
-    state.lastSeasonPlanId = result.season_plan.id;
-    renderSeason(result);
-    toast("Season Plan created.");
+    toast(`Plan created with ${(result.actions || []).length} actions.`);
     await refreshAll();
+    if (result.season_plan) select("season_plan", result.season_plan, { actions: result.actions });
   } catch (error) {
-    toast(readableError(error));
+    toast(readableError(error), true);
   }
 }
 
-async function previewCalendar() {
-  if (!state.lastSeasonPlanId) {
-    const plans = state.system?.persistence?.season_plan_count ? await api("/api/v1/season/plans") : { season_plans: [] };
-    state.lastSeasonPlanId = plans.season_plans?.[0]?.id;
+/* --- Pillar 2: Evidence --- */
+
+function renderEvidence(canvas) {
+  const search = panelElement("Retrieve evidence");
+  search.querySelector(".panel-body").innerHTML = `
+    <div class="row">
+      <div class="field" style="flex:3"><label>Question</label><input id="ev-query" value="tomato heat stress shading" /></div>
+      <button class="btn" id="ev-search">Search</button>
+      <button class="btn primary" id="ev-synth">Synthesize</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:11px">
+      Search is retrieval only and runs no model. Synthesis validates every citation against retrieved works —
+      an identifier the model invents, even inside prose, is rejected rather than stored.
+    </p>`;
+  canvas.appendChild(search);
+  $("#ev-search").addEventListener("click", () => runResearch(false));
+  $("#ev-synth").addEventListener("click", () => runResearch(true));
+
+  const works = (state.lastResearch && state.lastResearch.works) || [];
+  const resultsPanel = panelElement(`Retrieved works — ${works.length}`);
+  const body = resultsPanel.querySelector(".panel-body");
+  body.classList.add("tight");
+  if (!works.length) {
+    body.innerHTML = `<div class="empty-state">No retrieval yet.<div class="hint">Results carry publication identity and study type, and contradictions stay visible.</div></div>`;
+  } else {
+    body.appendChild(objectTable(
+      ["Title", "Year", "Type", "Identity"],
+      works.map((work) => ({
+        object: work,
+        type: "research_work",
+        cells: [
+          { text: work.title || "Untitled", className: "text" },
+          { text: work.publication_year || "—" },
+          { html: `<span class="badge muted">${escapeHtml(work.study_type || "unclassified")}</span>` },
+          { text: work.doi || work.pmid || work.external_id || "—" },
+        ],
+      }))
+    ));
   }
-  if (!state.lastSeasonPlanId) return toast("Create a Season Plan first.");
+  canvas.appendChild(resultsPanel);
+
+  if (state.lastResearch && state.lastResearch.synthesis) {
+    const synthesis = state.lastResearch.synthesis;
+    const panel = panelElement("Synthesis");
+    panel.querySelector(".panel-body").innerHTML = `
+      <div class="row" style="margin-bottom:8px">
+        <span class="badge info">quality: ${escapeHtml(String(synthesis.evidence_quality || "unknown"))}</span>
+        ${synthesis.uncertainty ? `<span class="badge warn">uncertainty: ${escapeHtml(String(synthesis.uncertainty.level || "unstated"))}</span>` : ""}
+        <span class="badge muted">model runs: ${Number(synthesis.model_run_count || 0)}</span>
+      </div>
+      <div>${escapeHtml(String(synthesis.summary || "No summary returned."))}</div>
+      <div style="margin-top:8px">${sourceChips(synthesis.source_record_ids || [])}</div>`;
+    canvas.appendChild(panel);
+  }
+}
+
+async function runResearch(synthesize) {
+  const query = $("#ev-query").value;
   try {
-    const preview = await api("/api/v1/calendar/preview", { method: "POST", body: { season_plan_id: state.lastSeasonPlanId } });
-    $("#season-output").textContent = JSON.stringify(preview, null, 2);
-    $("#calendar-state").textContent = "Preview ready - external writes: 0";
+    if (synthesize) {
+      const result = await api("/api/v1/research/synthesize", {
+        method: "POST",
+        body: { question: query, location_id: state.locations.active_location_id, use_model: false },
+      });
+      state.lastResearch = state.lastResearch || {};
+      state.lastResearch.synthesis = result;
+      toast("Synthesis complete; citations validated.");
+    } else {
+      const result = await api("/api/v1/research/search", { method: "POST", body: { query, limit: 10 } });
+      state.lastResearch = { works: result.works || result.results || [] };
+      toast(`Retrieved ${(state.lastResearch.works || []).length} works.`);
+    }
+    renderObjectTypes();
+    renderPillar();
   } catch (error) {
-    $("#calendar-state").textContent = "Google Calendar - Not connected";
-    toast(readableError(error));
+    toast(readableError(error), true);
   }
 }
 
-async function submitResearchSearch(event) {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
+/* --- Pillar 3: Identify & Forecast --- */
+
+function renderIdentify(canvas) {
+  const conditions = panelElement("Current conditions");
+  const body = conditions.querySelector(".panel-body");
+  if (!state.locations.active_location_id) {
+    body.innerHTML = `<div class="empty-state">No active location.<div class="hint">Set one in the left rail to resolve geography, weather, soil, and water.</div></div>`;
+  } else if (!state.lastEnvironment) {
+    body.innerHTML = `<button class="btn primary" id="env-load">Resolve conditions</button>
+      <p class="muted" style="margin:8px 0 0;font-size:11px">Deterministic path — no model run.</p>`;
+  } else {
+    body.appendChild(environmentReport(state.lastEnvironment));
+  }
+  canvas.appendChild(conditions);
+  if ($("#env-load")) $("#env-load").addEventListener("click", loadEnvironment);
+
+  const taxonomy = panelElement("Identify");
+  taxonomy.querySelector(".panel-body").innerHTML = `
+    <div class="row">
+      <div class="field" style="flex:2"><label>Taxon or common name</label><input id="id-taxon" value="Solanum lycopersicum" /></div>
+      <button class="btn" id="id-resolve">Resolve taxonomy</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:2"><label>Photo</label><input id="id-image" type="file" accept="image/*" /></div>
+      <button class="btn" id="id-vision">Analyze image</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:11px">
+      Vision output separates what is visible from what is hypothesized, and is never a confirmed diagnosis.
+    </p>
+    <div id="id-result" style="margin-top:10px"></div>`;
+  canvas.appendChild(taxonomy);
+  $("#id-resolve").addEventListener("click", resolveTaxon);
+  $("#id-vision").addEventListener("click", analyzeImage);
+
+  const movement = panelElement("Regulatory movement check");
+  movement.querySelector(".panel-body").innerHTML = `
+    <div class="row">
+      <div class="field"><label>Origin</label><input id="mv-origin" value="tx-houston" /></div>
+      <div class="field"><label>Destination</label><input id="mv-dest" value="fl-orlando" /></div>
+      <div class="field"><label>Species</label><input id="mv-species" value="Citrus sinensis" /></div>
+      <button class="btn" id="mv-run">Check</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:11px">
+      Fail-closed: an unresolved rule returns UNRESOLVED, never an implied permission. Not legal advice.
+    </p>
+    <div id="mv-result" style="margin-top:10px"></div>`;
+  canvas.appendChild(movement);
+  $("#mv-run").addEventListener("click", checkMovement);
+}
+
+async function loadEnvironment() {
   try {
-    const result = await api("/api/v1/research/search", { method: "POST", body: { query: data.get("query"), limit: 5 } });
-    renderResearchSearch(result);
+    state.lastEnvironment = await api("/api/v1/context/environment", {
+      method: "POST",
+      body: { location_id: state.locations.active_location_id },
+    });
+    renderPillar();
   } catch (error) {
-    toast(readableError(error));
+    toast(readableError(error), true);
   }
 }
 
-async function synthesizeResearch() {
-  const query = $("#research-form input[name='query']").value;
+function environmentReport(bundle) {
+  const snapshot = bundle.environmental_snapshot || {};
+  const wrapper = document.createElement("div");
+  const measures = [
+    ["Temperature", snapshot.temperature],
+    ["Rain chance", snapshot.precipitation],
+    ["Humidity", snapshot.humidity],
+    ["Solar radiation", snapshot.solar_radiation],
+    ["Photoperiod", snapshot.photoperiod],
+  ];
+  const list = document.createElement("dl");
+  list.className = "kv";
+  measures.forEach(([label, measure]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const value = document.createElement("dd");
+    if (measure && measure.value != null) {
+      value.textContent = `${measure.value}${measure.unit ? " " + measure.unit : ""}`;
+    } else {
+      value.textContent = "unavailable";
+      value.className = "unset";
+    }
+    list.append(term, value);
+  });
+  wrapper.appendChild(list);
+
+  const statuses = snapshot.provider_statuses || {};
+  const badges = document.createElement("div");
+  badges.style.marginTop = "10px";
+  badges.innerHTML = Object.entries(statuses)
+    .map(([provider, status]) => `<span class="badge ${status === "AVAILABLE" || status === "CACHE_HIT" ? "ok" : "warn"}">${escapeHtml(provider)}: ${escapeHtml(String(status))}</span> `)
+    .join("");
+  wrapper.appendChild(badges);
+  wrapper.appendChild(chipRow(bundle.source_record_ids || []));
+  return wrapper;
+}
+
+async function resolveTaxon() {
   try {
-    const result = await api("/api/v1/research/synthesize", { method: "POST", body: { question: query, use_model: false } });
-    renderResearchSynthesis(result);
+    const result = await api("/api/v1/research/search", { method: "POST", body: { query: $("#id-taxon").value, limit: 1 } });
+    $("#id-result").innerHTML = `<pre class="raw">${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
   } catch (error) {
-    toast(readableError(error));
+    toast(readableError(error), true);
   }
 }
 
-async function submitMovement(event) {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
+async function analyzeImage() {
+  const file = $("#id-image").files[0];
+  if (!file) return toast("Choose an image first.", true);
+  try {
+    const base64 = await fileToBase64(file);
+    const media = await api("/api/v1/vision/media", { method: "POST", body: { image_base64: base64, content_type: file.type || "image/jpeg" } });
+    const analysis = await api("/api/v1/vision/analyze", {
+      method: "POST",
+      body: { media_attachment_id: media.id, location_id: state.locations.active_location_id },
+    });
+    state.lastVision = analysis;
+    $("#id-result").innerHTML = visionHtml(analysis);
+  } catch (error) {
+    toast(readableError(error), true);
+  }
+}
+
+function visionHtml(analysis) {
+  const observations = analysis.visual_observations || [];
+  const hypotheses = analysis.visual_hypotheses || [];
+  return `
+    <div class="badge ${analysis.provider_status === "AVAILABLE" ? "ok" : "warn"}">${escapeHtml(String(analysis.provider_status || analysis.status || "unknown"))}</div>
+    <h3 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2);margin:10px 0 4px">Visible evidence</h3>
+    ${observations.length ? `<ul style="margin:0;padding-left:18px">${observations.map((o) => `<li>${escapeHtml(o.label || "")} — ${escapeHtml(o.description || "")}</li>`).join("")}</ul>` : `<div class="muted">none reported</div>`}
+    <h3 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2);margin:10px 0 4px">Hypotheses (not a diagnosis)</h3>
+    ${hypotheses.length ? `<ul style="margin:0;padding-left:18px">${hypotheses.map((h) => `<li>${escapeHtml(h.label || "")} <span class="badge muted">${escapeHtml(String(h.status || "hypothesis"))}</span></li>`).join("")}</ul>` : `<div class="muted">none reported</div>`}`;
+}
+
+async function checkMovement() {
   try {
     const result = await api("/api/v1/movement/check", {
       method: "POST",
       body: {
-        species: data.get("species"),
-        origin_alias: data.get("origin"),
-        destination_alias: data.get("destination"),
-        plant_part: data.get("plantPart"),
-        live_plant: data.get("livePlant") === "on",
-        soil_attached: data.get("soilAttached") === "on",
-        purpose: data.get("purpose"),
+        origin_alias: $("#mv-origin").value,
+        destination_alias: $("#mv-dest").value,
+        species: $("#mv-species").value,
+        plant_part: "live plant",
+        live_plant: true,
       },
     });
-    renderMovement(result);
+    state.lastMovement = result;
+    const tone = result.status === "RESTRICTED" ? "bad" : result.status === "ALLOWED" ? "ok" : "warn";
+    $("#mv-result").innerHTML = `
+      <div class="badge ${tone}" style="font-size:12px">${escapeHtml(String(result.status))}</div>
+      <div style="margin-top:8px">${(result.applicable_rules || []).map((rule) => `
+        <div class="provenance">
+          <div class="src"><span class="authority">${escapeHtml(rule.authority || rule.jurisdiction_pack || "rule")}</span></div>
+          <div class="src"><span class="meta">${escapeHtml(rule.citation || rule.rule_id || "")}</span></div>
+          <div>${escapeHtml(rule.requirement || rule.summary || "")}</div>
+        </div>`).join("") || `<div class="muted">No matching rules.</div>`}</div>`;
   } catch (error) {
-    toast(readableError(error));
+    toast(readableError(error), true);
   }
 }
 
-async function submitMarkets(event) {
-  event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  try {
-    const result = await api("/api/v1/markets/context", { method: "POST", body: { commodity: data.get("commodity"), location_id: activeLocationId() } });
-    renderMarkets(result);
-  } catch (error) {
-    toast(readableError(error));
-  }
+/* ---------------- selection + inspector ---------------- */
+
+function select(typeId, object, extra) {
+  state.selection = { type: typeId, id: object.id, data: object, extra: extra || {} };
+  renderObjectTypes();
+  renderInspector();
+  $$(".obj-row").forEach((row) => row.classList.remove("selected"));
 }
 
-function renderStatus() {
-  $("#identity-label").textContent = state.identity?.label || "Development Identity";
-  $("#sidebar-spend").textContent = `$${Number(state.system?.cost?.total_development_cash_spent || 0).toFixed(2)}`;
-  $("#sidebar-db").textContent = state.status?.database || "SQLite";
-  $("#sidebar-model").textContent = state.status?.text_model || "unknown";
-}
+function renderInspector() {
+  const selection = state.selection;
+  if (!selection) return;
+  const type = ONTOLOGY.find((t) => t.id === selection.type);
+  const object = selection.data;
 
-function renderLocations() {
-  const select = $("#location-select");
-  const locations = state.locations?.locations || [];
-  const active = state.locations?.active_location;
-  select.innerHTML = `<option value="">Saved locations</option>`;
-  for (const location of locations) {
-    const option = document.createElement("option");
-    option.value = location.id;
-    option.textContent = `${locationLabel(location)} - ${locationKindLabel(location.source_kind)}`;
-    option.selected = location.id === state.activeLocationId;
-    select.appendChild(option);
-  }
-  select.classList.toggle("hidden", locations.length === 0);
-  select.title = active
-    ? `${active.source_kind}: ${active.admin2 || active.label}`
-    : "No active location. Use browser location, enter a location, or select a saved real location.";
+  $("#insp-type").textContent = type ? type.name : selection.type;
+  $("#insp-title").textContent = type ? type.label(object) : "Object";
+  $("#insp-id").textContent = object.id || "";
 
-  if (!active) {
-    $("#location-primary").textContent = "Location required";
-    $("#location-secondary").textContent = "Use current location or enter location manually.";
-    $("#location-accuracy").textContent = "";
-    return;
-  }
-  $("#location-primary").textContent = locationLabel(active);
-  $("#location-secondary").textContent = locationKindLabel(active.source_kind);
-  $("#location-accuracy").textContent = active.accuracy_m ? `Accuracy: ~${formatMeters(active.accuracy_m)} m` : "";
-}
+  const body = $("#insp-body");
+  body.innerHTML = "";
 
-function renderPlants() {
-  $("#plant-count").textContent = String(state.plants.length);
-  const select = $("#plant-select");
-  select.innerHTML = "";
-  for (const plant of state.plants) {
-    const option = document.createElement("option");
-    option.value = plant.id;
-    option.textContent = plant.nickname;
-    option.selected = plant.id === state.selectedPlantId;
-    select.appendChild(option);
-  }
-  $("#plant-list").innerHTML = state.plants.map((plant) => plantCard(plant)).join("") || `<div class="empty">No plants.</div>`;
-  $$(".plant-card").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.selectedPlantId = button.dataset.id;
-      renderPlants();
-      renderSelectedPlant();
-    });
-  });
-}
+  body.appendChild(inspectorSection("Properties", propertyList(object)));
 
-async function renderSelectedPlant() {
-  const plantId = state.selectedPlantId;
-  if (!plantId) {
-    $("#plant-detail").innerHTML = `<div class="empty">No plant selected.</div>`;
-    $("#observation-list").innerHTML = "";
-    return;
-  }
-  try {
-    const detail = await api(`/api/v1/plants/${plantId}`);
-    const observations = await api(`/api/v1/plants/${plantId}/observations`);
-    $("#plant-detail").innerHTML = plantDetail(detail);
-    $("#observation-list").innerHTML = observations.map((item) => timelineItem(item.observed_at, item.text)).join("") || `<div class="empty">No observations.</div>`;
-  } catch (error) {
-    $("#plant-detail").innerHTML = `<div class="empty">${readableError(error)}</div>`;
-  }
-}
-
-function renderGuidance(result) {
-  if (result.route === "environment" && result.structured_response?.type === "environment_report") {
-    $("#guidance-card").innerHTML = environmentCard(result.structured_response);
-    return;
-  }
-  if (result.guidance_plan_id) {
-    $("#guidance-card").innerHTML = `<strong>Saved GuidancePlan</strong><span>${result.guidance_plan_id}</span><p>${escapeHtml(result.content)}</p>`;
+  const sourceIds = object.source_record_ids || [];
+  if (sourceIds.length) {
+    body.appendChild(inspectorSection("Provenance", chipRow(sourceIds)));
   } else {
-    $("#guidance-card").textContent = result.validation_error || result.content || "No GuidancePlan persisted.";
+    const none = document.createElement("div");
+    none.className = "muted";
+    none.style.fontSize = "11px";
+    none.textContent = "No source records attached to this object.";
+    body.appendChild(inspectorSection("Provenance", none));
   }
+
+  if (selection.extra && selection.extra.actions) {
+    body.appendChild(inspectorSection("Actions", actionTimeline(selection.extra.actions)));
+  }
+
+  const raw = document.createElement("pre");
+  raw.className = "raw";
+  raw.textContent = JSON.stringify(object, null, 2);
+  body.appendChild(inspectorSection("Raw object", raw));
 }
 
-async function renderSourceChips(sourceIds) {
-  const box = $("#chat-sources");
-  if (!sourceIds.length) {
-    box.innerHTML = "";
-    return;
-  }
+function propertyList(object) {
+  const list = document.createElement("dl");
+  list.className = "kv";
+  Object.entries(object)
+    .filter(([key, value]) => typeof value !== "object" || value === null)
+    .slice(0, 24)
+    .forEach(([key, value]) => {
+      const term = document.createElement("dt");
+      term.textContent = key.replace(/_/g, " ");
+      const definition = document.createElement("dd");
+      if (value === null || value === "" || value === undefined) {
+        definition.textContent = "unset";
+        definition.className = "unset";
+      } else {
+        definition.textContent = String(value);
+      }
+      list.append(term, definition);
+    });
+  return list;
+}
+
+function actionTimeline(actions) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "timeline";
+  actions.forEach((action) => {
+    const item = document.createElement("div");
+    item.className = "timeline-item";
+    item.innerHTML = `<div class="when">${escapeHtml(String(action.preferred_at || "").slice(0, 16))}</div>
+      <div class="what">${escapeHtml(action.title || action.action_type || "action")}</div>`;
+    wrapper.appendChild(item);
+  });
+  return wrapper;
+}
+
+function inspectorSection(heading, node) {
+  const section = document.createElement("div");
+  section.className = "inspector-section";
+  const title = document.createElement("h3");
+  title.textContent = heading;
+  section.append(title, node);
+  return section;
+}
+
+/* ---------------- provenance ---------------- */
+
+function chipRow(ids) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = sourceChips(ids);
+  wrapper.querySelectorAll(".source-chip").forEach((chip) => {
+    chip.addEventListener("click", () => openSource(chip.dataset.id));
+  });
+  return wrapper;
+}
+
+function sourceChips(ids) {
+  if (!ids || !ids.length) return `<span class="muted" style="font-size:11px">No sources attached.</span>`;
+  return ids.map((id) => `<span class="source-chip" data-id="${escapeHtml(id)}">${escapeHtml(String(id).slice(0, 8))}</span>`).join("");
+}
+
+async function openSource(id) {
   try {
-    const payload = await api(`/api/v1/source-records?ids=${encodeURIComponent(sourceIds.join(","))}`);
-    box.innerHTML = payload.source_records.map((source) => `<span>${escapeHtml(source.provider)}: ${escapeHtml(source.title || source.authority || "source")}</span>`).join("");
-  } catch {
-    box.innerHTML = sourceIds.map((id) => `<span>${escapeHtml(id)}</span>`).join("");
+    if (!state.sourceCache.has(id)) {
+      const result = await api(`/api/v1/source-records?ids=${encodeURIComponent(id)}`);
+      (result.source_records || []).forEach((record) => state.sourceCache.set(record.id, record));
+    }
+    const record = state.sourceCache.get(id);
+    if (record) select("source_record", record);
+    renderObjectTypes();
+  } catch (error) {
+    toast(readableError(error), true);
   }
 }
 
-function renderVision(result) {
-  const analysis = result.visual_analysis || {};
-  $("#vision-status").textContent = `${analysis.status || result.provider_status || "unknown"} - ${analysis.provider || "provider"}`;
-  $("#vision-observations").innerHTML = (analysis.visual_observations || []).map((item) => `<li>${escapeHtml(item.label)} <span>${escapeHtml(item.description || "")}</span></li>`).join("");
-  $("#vision-hypotheses").innerHTML = (analysis.visual_hypotheses || []).map((item) => `<li>${escapeHtml(item.label)} <span>${escapeHtml(item.status || "hypothesis")}</span></li>`).join("");
-  $("#vision-output").textContent = JSON.stringify(result, null, 2);
-}
+/* ---------------- agent ---------------- */
 
-function renderSeason(result) {
-  const plan = result.season_plan || {};
-  state.lastSeasonPlanId = plan.id || state.lastSeasonPlanId;
-  $("#season-timeline").innerHTML = (result.actions || []).map((action) => timelineItem(action.preferred_at || action.earliest_at || "scheduled", action.title)).join("");
-  $("#season-output").textContent = JSON.stringify(result, null, 2);
-  $("#calendar-state").textContent = "Google Calendar - Not connected";
-}
+async function submitAgent(event) {
+  event.preventDefault();
+  const input = $("#agent-input");
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = "";
+  appendTurn("user", message);
+  $("#agent-route").textContent = "working";
+  $("#agent-route").className = "badge info";
 
-function renderResearchSearch(result) {
-  const providerStatuses = result.provider_statuses || [];
-  const works = result.works || [];
-  $("#research-quality").innerHTML = providerStatuses.map((item) => `<span>${escapeHtml(item)}</span>`).join("");
-  $("#research-results").innerHTML = works.map((work) => sourceCard(work.title, `${work.journal || "unknown journal"} ${work.publication_year || ""}`, work.study_type || "unknown")).join("");
-  $("#research-output").textContent = JSON.stringify(result, null, 2);
-}
-
-function renderResearchSynthesis(result) {
-  $("#research-quality").innerHTML = `<span>${escapeHtml(result.evidence_quality || "unknown")}</span><span>${escapeHtml(result.model_confidence || "not_model_generated")}</span>`;
-  $("#research-results").innerHTML = [
-    ...((result.supporting_claims || []).map((claim) => sourceCard(claim.statement, "supporting", claim.evidence_quality))),
-    ...((result.contradictory_claims || []).map((claim) => sourceCard(claim.statement, "contradictory", claim.evidence_quality))),
-  ].join("");
-  $("#research-output").textContent = JSON.stringify(result, null, 2);
-}
-
-function renderMovement(result) {
-  $("#movement-status").textContent = result.status || "UNRESOLVED";
-  $("#movement-status").dataset.status = result.status || "UNRESOLVED";
-  $("#movement-rules").innerHTML = (result.applicable_rules || []).map((rule) => sourceCard(rule.rule_id, rule.authority, rule.jurisdiction_pack)).join("") || `<div class="empty">No applicable rules.</div>`;
-  $("#movement-output").textContent = JSON.stringify(result, null, 2);
-}
-
-function renderMarkets(result) {
-  const dates = result.data_dates || {};
-  $("#market-metrics").innerHTML = [
-    metric("Commodity", result.commodity?.canonical_name || "unknown"),
-    metric("Production", (dates.production || []).join(", ") || "unavailable"),
-    metric("Markets", (dates.markets || []).join(", ") || "unavailable"),
-    metric("Freshness", result.freshness?.markets || "unavailable"),
-  ].join("");
-  $("#markets-output").textContent = JSON.stringify(result, null, 2);
-}
-
-function renderSystem() {
-  const status = state.system || {};
-  const active = state.locations?.active_location;
-  const automaticPaidUsage = status.cost?.automatic_paid_usage_enabled ? "ON" : "OFF";
-  $("#system-list").innerHTML = [
-    metricRow("UI", status.ui_url),
-    metricRow("API", status.api_url),
-    metricRow("Database", status.database),
-    metricRow("Text model", status.text_model),
-    metricRow("Vision model", status.vision_model),
-    metricRow("Automatic paid usage", automaticPaidUsage),
-    metricRow("Spend", `$${Number(status.cost?.total_development_cash_spent || 0).toFixed(2)}`),
-    metricRow("Reserve", `$${Number(status.cost?.reserve_remaining || 20).toFixed(2)}`),
-    metricRow("Telemetry", status.telemetry),
-    metricRow("Active location", active ? `${active.label} (${active.source_kind})` : "none"),
-    metricRow("Git", status.git_commit),
-  ].join("");
-  $("#provider-list").innerHTML = (status.providers || []).map((provider) => sourceCard(provider.provider_id, provider.enabled ? provider.mode : "disabled", provider.billing_class)).join("");
-  $("#persistence-list").innerHTML = Object.entries(status.persistence || {}).map(([key, value]) => metricRow(key, value)).join("");
-}
-
-function appendMessage(role, text) {
-  const node = document.createElement("article");
-  node.className = `message ${role}`;
-  node.textContent = text;
-  $("#messages").appendChild(node);
-  $("#messages").scrollTop = $("#messages").scrollHeight;
-  return node;
-}
-
-async function api(path, options = {}) {
-  const init = { method: options.method || "GET", headers: { ...(options.headers || {}) } };
-  if (options.body !== undefined) {
-    init.headers["Content-Type"] = "application/json";
-    init.body = JSON.stringify(options.body);
+  try {
+    const result = await api("/api/v1/chat", {
+      method: "POST",
+      body: {
+        message,
+        location_id: state.locations.active_location_id,
+        user_plant_id: state.selection && state.selection.type === "plant" ? state.selection.id : null,
+      },
+    });
+    state.modelRuns += Number(result.model_run_count || 0);
+    renderTopbar();
+    appendTurn("gaia", result.content || "", result);
+    $("#agent-route").textContent = result.route || "done";
+    $("#agent-route").className = "badge " + (result.model_run_count ? "info" : "ok");
+    await refreshAll();
+  } catch (error) {
+    appendTurn("gaia", readableError(error));
+    $("#agent-route").textContent = "error";
+    $("#agent-route").className = "badge bad";
   }
-  const response = await fetch(path, init);
+}
+
+function appendTurn(who, text, result) {
+  const log = $("#agent-log");
+  const turn = document.createElement("div");
+  turn.className = `turn ${who}`;
+  const label = document.createElement("div");
+  label.className = "who";
+  label.textContent = who === "user" ? "You" : "GAIA";
+  const body = document.createElement("div");
+  body.className = "body";
+  body.textContent = text;
+  turn.append(label, body);
+
+  if (result) {
+    const meta = document.createElement("div");
+    meta.className = "route-line";
+    meta.innerHTML = `<span class="badge ${result.model_run_count ? "info" : "ok"}">${escapeHtml(String(result.route || "route"))}</span>
+      <span class="badge muted">model runs: ${Number(result.model_run_count || 0)}</span>`;
+    turn.appendChild(meta);
+    if ((result.source_record_ids || []).length) turn.appendChild(chipRow(result.source_record_ids));
+  }
+
+  log.appendChild(turn);
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ---------------- location ---------------- */
+
+function renderLocationSelect() {
+  const select = $("#location-select");
+  const locations = state.locations.locations || [];
+  select.innerHTML = locations.length
+    ? locations.map((location) => `<option value="${escapeHtml(location.id)}"${location.id === state.locations.active_location_id ? " selected" : ""}>${escapeHtml(location.label || location.id)}</option>`).join("")
+    : `<option value="">No location set</option>`;
+}
+
+async function activateSelectedLocation() {
+  const id = $("#location-select").value;
+  if (!id) return;
+  const location = (state.locations.locations || []).find((item) => item.id === id);
+  if (!location) return;
+  await setActiveLocation({ source_kind: "saved", label: location.label, latitude: location.latitude, longitude: location.longitude });
+}
+
+function useDeviceLocation() {
+  if (!navigator.geolocation) return toast("This browser has no geolocation.", true);
+  navigator.geolocation.getCurrentPosition(
+    (position) => setActiveLocation({
+      source_kind: "device",
+      label: "Device location",
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy_m: position.coords.accuracy,
+    }),
+    () => toast("Location permission denied.", true)
+  );
+}
+
+function enterLocation() {
+  const raw = window.prompt("Enter latitude, longitude (decimal degrees)");
+  if (!raw) return;
+  const [latitude, longitude] = raw.split(",").map((part) => Number(part.trim()));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return toast("Could not read those coordinates.", true);
+  setActiveLocation({ source_kind: "manual", label: "Manual location", latitude, longitude });
+}
+
+async function setActiveLocation(body) {
+  try {
+    await api("/api/v1/locations/active", { method: "POST", body });
+    state.lastEnvironment = null;
+    await refreshAll();
+    toast("Active location set.");
+  } catch (error) {
+    toast(readableError(error), true);
+  }
+}
+
+/* ---------------- system ---------------- */
+
+async function showSystem() {
+  const system = state.system || (await api("/api/v1/system"));
+  const canvas = $("#canvas");
+  canvas.innerHTML = "";
+  const panel = panelElement("Providers");
+  const body = panel.querySelector(".panel-body");
+  body.classList.add("tight");
+  body.appendChild(objectTable(
+    ["Provider", "Type", "Mode", "Billing", "Remote"],
+    (system.providers || []).map((provider) => ({
+      cells: [
+        { text: provider.provider_id, className: "text" },
+        { text: provider.provider_type },
+        { html: `<span class="badge ${provider.mode === "live" ? "ok" : provider.mode === "disabled" ? "muted" : "info"}">${escapeHtml(String(provider.mode))}</span>` },
+        { text: provider.billing_class },
+        { text: provider.remote ? "yes" : "no" },
+      ],
+    }))
+  ));
+  canvas.appendChild(panel);
+
+  const cost = panelElement("Cost posture");
+  cost.querySelector(".panel-body").innerHTML = `<pre class="raw">${escapeHtml(JSON.stringify(system.cost || {}, null, 2))}</pre>`;
+  canvas.appendChild(cost);
+}
+
+async function seedDemo() {
+  try {
+    await api("/api/v1/seed/demo", { method: "POST", body: {} });
+    toast("Demo workspace seeded.");
+    await refreshAll();
+  } catch (error) {
+    toast(readableError(error), true);
+  }
+}
+
+/* ---------------- primitives ---------------- */
+
+function panelElement(heading) {
+  const panel = document.createElement("section");
+  panel.className = "panel";
+  panel.innerHTML = `<div class="panel-head"><h2>${escapeHtml(heading)}</h2><span class="spacer"></span></div><div class="panel-body"></div>`;
+  return panel;
+}
+
+function objectTable(headers, rows) {
+  const table = document.createElement("table");
+  table.className = "data";
+  table.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>`;
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    row.cells.forEach((cell) => {
+      const td = document.createElement("td");
+      if (cell.html) td.innerHTML = cell.html;
+      else td.textContent = cell.text == null ? "—" : String(cell.text);
+      if (cell.className) td.className = cell.className;
+      tr.appendChild(td);
+    });
+    if (row.object) {
+      tr.style.cursor = "pointer";
+      tr.addEventListener("click", () => select(row.type, row.object, row.extra));
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+async function api(path, options) {
+  const settings = { method: (options && options.method) || "GET", headers: { "Content-Type": "application/json" } };
+  if (options && options.body !== undefined) settings.body = JSON.stringify(options.body);
+  const response = await fetch(path, settings);
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
-  if (!response.ok) throw new Error(payload.message || payload.status || `HTTP ${response.status}`);
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error(`Malformed response from ${path}`);
+  }
+  if (!response.ok) {
+    const reference = payload.error_reference ? ` (ref ${payload.error_reference})` : "";
+    throw new Error(`${payload.error || response.status}${reference}`);
+  }
   return payload;
-}
-
-function previewVisionFile() {
-  const file = $("#vision-file").files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    $("#image-preview").innerHTML = `<img src="${reader.result}" alt="Selected plant" />`;
-  };
-  reader.readAsDataURL(file);
 }
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-function plantCard(plant) {
-  const active = plant.id === state.selectedPlantId ? " active" : "";
-  return `<button class="plant-card${active}" data-id="${plant.id}" type="button"><strong>${escapeHtml(plant.nickname)}</strong><span>${escapeHtml(plant.cultivar || plant.lifecycle_stage || "plant")}</span></button>`;
-}
-
-function plantDetail(detail) {
-  const plant = detail.plant || {};
-  const entity = detail.plant_entity || {};
-  const profile = detail.plant_profile || {};
-  return `
-    <dl class="metric-list">
-      ${metricRow("Nickname", plant.nickname)}
-      ${metricRow("Scientific name", entity.scientific_name)}
-      ${metricRow("Cultivar", plant.cultivar || "unknown")}
-      ${metricRow("Stage", plant.lifecycle_stage || "unknown")}
-      ${metricRow("Status", plant.status)}
-      ${metricRow("Profile completeness", profile.completeness ?? "unknown")}
-    </dl>
-  `;
-}
-
-function timelineItem(date, text) {
-  return `<div class="timeline-item"><strong>${escapeHtml(date || "undated")}</strong><span>${escapeHtml(text || "")}</span></div>`;
-}
-
-function sourceCard(title, meta, badge) {
-  return `<article class="source-card"><strong>${escapeHtml(title || "Untitled")}</strong><span>${escapeHtml(meta || "")}</span><em>${escapeHtml(badge || "")}</em></article>`;
-}
-
-function environmentCard(report) {
-  const location = report.location?.label || "Current location";
-  return `
-    <article class="environment-card">
-      <strong>${escapeHtml(location)}</strong>
-      <div class="metric-grid">
-        ${metric("Temperature", measurementValue(report.temperature))}
-        ${metric("Rain chance", measurementValue(report.precipitation_probability))}
-        ${metric("Wind", windValue(report.wind))}
-        ${metric("Daylight", daylightValue(report.photoperiod))}
-      </div>
-      <dl class="metric-list">
-        ${metricRow("Humidity", measurementValue(report.humidity))}
-        ${metricRow("Soil moisture", contextValue(report.soil_moisture_context))}
-        ${metricRow("Solar radiation", measurementValue(report.solar_radiation))}
-        ${metricRow("Water context", contextValue(report.water_context))}
-      </dl>
-    </article>
-  `;
-}
-
-function metric(label, value) {
-  return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
-}
-
-function metricRow(label, value) {
-  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value ?? "unknown")}</dd></div>`;
-}
-
-function activeLocationId() {
-  return state.activeLocationId || null;
-}
-
-function locationLabel(location) {
-  const county = location?.admin2 || location?.label || "Location";
-  const state = stateName(location?.admin1);
-  return state ? `${county}, ${state}` : county;
-}
-
-function stateName(code) {
-  return {
-    CA: "California",
-    FL: "Florida",
-    GA: "Georgia",
-    TX: "Texas",
-  }[String(code || "").toUpperCase()] || "";
-}
-
-function locationKindLabel(sourceKind) {
-  if (sourceKind === "device") return "Device location";
-  if (sourceKind === "manual") return "Manual location";
-  if (sourceKind === "demo_fixture") return "Demo fixture location";
-  return "Saved location";
-}
-
-function formatMeters(value) {
-  const meters = Number(value);
-  if (!Number.isFinite(meters)) return "";
-  return String(Math.round(meters));
-}
-
-function locationToast(location) {
-  if (!location) return "No active location selected.";
-  return `${locationKindLabel(location.source_kind)} active: ${locationLabel(location)}.`;
-}
-
-function measurementValue(measurement) {
-  if (!measurement || measurement.status !== "available") return "unavailable";
-  return `${measurement.value}${measurement.unit ? ` ${measurement.unit}` : ""}`;
-}
-
-function windValue(wind) {
-  if (!wind || wind.status !== "available") return "unavailable";
-  if (wind.direction && wind.speed) return `${wind.direction} at ${wind.speed}`;
-  return wind.speed || wind.direction || "unavailable";
-}
-
-function daylightValue(measurement) {
-  const value = measurementValue(measurement);
-  return value === "unavailable" ? value : `${value} daylight`;
-}
-
-function contextValue(context) {
-  if (!context || context.status !== "available") return "unavailable";
-  return context.map_unit || context.summary || context.semantic_note || "available";
-}
-
-function toast(message) {
-  const node = $("#toast");
-  node.textContent = message;
-  node.classList.add("show");
-  setTimeout(() => node.classList.remove("show"), 3200);
+function toast(message, isError) {
+  const element = $("#toast");
+  element.textContent = message;
+  element.className = `toast show${isError ? " error" : ""}`;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { element.className = "toast"; }, 4200);
 }
 
 function readableError(error) {
-  const text = String(error.message || error);
-  if (text.includes("provider")) return `Provider unavailable: ${text}`;
-  if (text.includes("denied")) return `Policy denied the request: ${text}`;
-  if (text.includes("calendar")) return `Calendar disconnected: ${text}`;
-  if (text.includes("image")) return `Invalid image: ${text}`;
-  return text;
+  return error && error.message ? error.message : String(error);
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

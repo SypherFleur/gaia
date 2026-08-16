@@ -44,6 +44,10 @@ from apps.api.gaia_api.vision_api import post_vision_analyze, post_vision_media
 
 WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
 
+# A client that hangs up mid-response is normal browser behavior (navigation,
+# refresh, closed tab), not a server fault.
+_CLIENT_DISCONNECTED = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
 
 class GaiaAlphaHandler(BaseHTTPRequestHandler):
     runtime: GaiaRuntime
@@ -234,6 +238,12 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def _internal_error(self, exc: Exception) -> None:
+        if isinstance(exc, _CLIENT_DISCONNECTED):
+            # The browser navigated away or refreshed mid-response. There is no
+            # socket left to answer on, and writing a 500 to it raises again —
+            # which is what produced the nested traceback storm.
+            self.close_connection = True
+            return
         # Exception text can carry file paths and SQL; log it locally and give
         # the client only a correlation id to quote.
         reference = uuid.uuid4().hex[:12]
@@ -252,11 +262,14 @@ class GaiaAlphaHandler(BaseHTTPRequestHandler):
 
     def _json(self, payload, *, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, sort_keys=True, default=_json_default).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except _CLIENT_DISCONNECTED:
+            self.close_connection = True
 
     def _static(self, path: str) -> None:
         relative = "index.html" if path == "/" else path.lstrip("/")
