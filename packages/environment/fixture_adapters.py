@@ -50,6 +50,7 @@ class FixtureNASAPowerProvider:
             "temperature_history": {"value": 29.1, "unit": "C", "parameter": "T2M", "evidence_type": "MODELED"},
             "precipitation_context": {"value": 2.1, "unit": "mm/day", "parameter": "PRECTOTCORR", "evidence_type": "MODELED"},
             "solar_radiation": {"value": 23.4, "unit": "MJ/m^2/day", "parameter": "ALLSKY_SFC_SW_DWN", "evidence_type": "MODELED"},
+            "observation_date": "2026-08-13",
             "temporal_resolution": "daily",
             "semantic_note": "NASA POWER is regional/model-derived environmental data, not an exact on-site sensor reading.",
         }

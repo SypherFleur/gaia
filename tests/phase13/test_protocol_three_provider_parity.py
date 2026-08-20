@@ -83,14 +83,54 @@ class ProtocolThreeProviderParityTest(unittest.TestCase):
         self.assertIsNone(live.data["precipitation_context"]["value"])
         self.assertIsNone(live.data["solar_radiation"]["value"])
 
-    def test_nasa_power_live_climate_context_uses_normalized_contract(self) -> None:
+    def test_nasa_power_requests_a_window_not_a_single_day(self) -> None:
         adapter = StubNASAPowerAdapter()
         result = run(adapter.climate_context(30.2672, -97.7431, "2026-08-14T00:00:00Z"))
 
         self.assertEqual(result.status, "AVAILABLE")
-        self.assertIn("start=20260814", adapter.last_url)
+        # POWER publishes on a lag; a single same-day request returns fill
+        # values and reads as "available but null". Ask for a window instead.
+        self.assertIn("end=20260814", adapter.last_url)
+        self.assertIn("start=20260804", adapter.last_url)
         self.assertIn("temperature_history", result.data)
         self.assertIn("semantic_note", result.data)
+
+    def test_nasa_power_uses_the_most_recent_published_day_in_the_window(self) -> None:
+        live = NASAPowerApiAdapter().normalize_daily_response(
+            {
+                "properties": {
+                    "parameter": {
+                        # The two newest days are not published yet.
+                        "T2M": {"20260812": 28.4, "20260813": -999, "20260814": -999},
+                        "PRECTOTCORR": {"20260812": 1.5, "20260813": -999, "20260814": -999},
+                        "ALLSKY_SFC_SW_DWN": {"20260812": 22.0, "20260813": -999, "20260814": -999},
+                    }
+                }
+            },
+            "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M",
+        )
+
+        self.assertEqual(live.data["temperature_history"]["value"], 28.4)
+        self.assertEqual(live.data["precipitation_context"]["value"], 1.5)
+        self.assertEqual(live.data["solar_radiation"]["value"], 22.0)
+        self.assertEqual(live.data["observation_date"], "2026-08-12")
+
+    def test_nasa_power_reports_missing_when_the_whole_window_is_unpublished(self) -> None:
+        live = NASAPowerApiAdapter().normalize_daily_response(
+            {
+                "properties": {
+                    "parameter": {
+                        "T2M": {"20260813": -999, "20260814": -999},
+                        "PRECTOTCORR": {"20260813": -999, "20260814": -999},
+                        "ALLSKY_SFC_SW_DWN": {"20260813": -999, "20260814": -999},
+                    }
+                }
+            },
+            "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M",
+        )
+
+        self.assertIsNone(live.data["temperature_history"]["value"])
+        self.assertIsNone(live.data["observation_date"])
 
     def test_gbif_live_normalizer_matches_fixture_taxonomy_contract(self) -> None:
         fixture = run(FixtureGBIFProvider().resolve_taxon("tomato"))

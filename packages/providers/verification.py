@@ -149,7 +149,7 @@ async def verify_live_providers(*, latitude: float = PROBE_LATITUDE, longitude: 
 
     probes = [
         ("census-geocoder", "Atlas geography (US Census)", census, lambda r: _outcome_for(r, {"county": getattr(r, "county_or_district", None), "state": getattr(r, "state_code", None)})),
-        ("usgs-nldi", "Atlas watershed (USGS NLDI)", watershed, lambda r: _outcome_for(r, {"watershed": getattr(r, "watershed", None)})),
+        ("usgs-wbd", "Atlas watershed (USGS WBD)", watershed, lambda r: _outcome_for(r, {"watershed": getattr(r, "watershed", None)})),
         ("nws", "Weather (NWS)", nws, lambda r: _outcome_for(r, {"temperature": (r.data or {}).get("temperature", {}).get("value")})),
         ("nasa-power", "Climate (NASA POWER)", nasa, lambda r: _outcome_for(r, {"temperature_history": (r.data or {}).get("temperature_history", {}).get("value")})),
         ("usda-nrcs-sda", "Soil (SSURGO)", soil, lambda r: _outcome_for(r, {"map_unit": (r.data or {}).get("map_unit")})),

@@ -1,6 +1,6 @@
 # GAIA Protocol Three Status
 
-Status date: 2026-08-15
+Status date: 2026-08-16
 
 Protocol Three is at the local-owner manual alpha gate. The engine is production-grade; the deployment story is not, and cannot be until the owner makes the authentication and hosting decisions listed under "Blocked on a human decision".
 
@@ -16,7 +16,7 @@ Browser: `http://127.0.0.1:8765/`. Optional seed: `python3 -m apps.cli.gaia --da
 
 ## Verification status
 
-- **Test suite: 470 tests, 0 failures, 9 opt-in skips.** Fully green on Linux.
+- **Test suite: 475 tests, 0 failures, 9 opt-in skips.** Fully green on Linux.
 - **CI: `.github/workflows/ci.yml`** runs the offline suite and constitution check on Linux/macOS/Windows across Python 3.12 and 3.13, plus guardrail jobs asserting the financial constitution stays intact and every live smoke stays opt-in. CI never reaches a live provider.
 - **Cash: $0.00 spent, $20.00 reserve intact.** No paid API, model, storage, telemetry, or overage path is enabled.
 - **Full code audit with five remediation tiers:** `docs/architecture/code-audit-2026-08-15.md`.
@@ -32,7 +32,7 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 | NASA POWER | live | Real, free, keyless |
 | SSURGO soil | live | Real, free, keyless |
 | USGS Water | live | Real, free, keyless |
-| Atlas watershed (USGS NLDI) | live | Real, free, keyless |
+| Atlas watershed (USGS WBD) | live | Real, free, keyless |
 | GBIF | live | Real, free, keyless |
 | Europe PMC | live | Real, free, keyless |
 | Ollama text / LLaVA | local | Real; requires local Ollama |
@@ -48,11 +48,31 @@ Defaults come from `apps/api/gaia_api/runtime.py::_fixture_defaults_for_runtime`
 
 **Sentinel's decision source is hand-authored fixture rules.** Live mode proves the official pages are reachable and hashes them for provenance; it does not parse regulatory text. This is deliberate — see "Deliberately deferred".
 
-## Not verified against live endpoints yet
+## Live verification — RECORDED 2026-08-16
 
-The eight keyless live adapters were built and tested structurally (real HTTP client usage, real response-schema parsing, fail-closed paths, parity with fixture contracts) but **no successful live call has been recorded**. The development sandbox blocks those hosts at the egress proxy, and NASS/AMS additionally need keys that have not been issued.
+**All eight keyless providers returned real data from their real endpoints: `checked 8, ok 8, failed 0`.** Verified by the owner on a machine with open egress (the development sandbox blocks these hosts at its egress proxy, so this could only be run locally).
 
-**This is the highest-value next action and only the owner can do it.** On a machine with open egress, one command probes all eight against their real endpoints:
+| Provider | Outcome | Sample returned |
+| --- | --- | --- |
+| census-geocoder | OK | Travis County, TX |
+| usgs-nldi | OK | `5781313` — see caveat below; source since replaced by `usgs-wbd` |
+| nws | OK | 76 °F |
+| nasa-power | OK | `null` — see caveat below |
+| usda-nrcs-sda | OK | Urban land, 0 to 6 percent slopes |
+| usgs-water | OK | 38 sites |
+| gbif | OK | Solanum lycopersicum L. (+ `occurrence_is_not_cultivation_suitability`) |
+| europe-pmc | OK | 1 work |
+
+Two data-quality caveats found by that run, both fixed on 2026-08-16:
+
+- **NASA POWER** reported OK with a `null` temperature. POWER publishes on a variable lag, so the probe's recent date had no value yet. The adapter now requests a 10-day window and uses the most recent day the service actually published, reporting it as `observation_date`.
+- **Atlas watershed** returned a bare COMID (`5781313`) rather than a watershed name. NLDI's position endpoint returns the NHDPlus *flowline* at the coordinate — a stream reach, not a watershed — and its `name` is a GNIS stream name that is usually empty, so the answer fell through to the identifier. The source is now the USGS Watershed Boundary Dataset, which is the authority that names hydrologic units; a code is never returned in place of a name.
+
+Both fixes changed which endpoint or date range is requested, so **re-run `providers verify` to confirm the watershed name and POWER temperature now come back populated.**
+
+Still unverified: **USDA NASS and AMS**, which need their own free API keys. Everything else in the table above is confirmed against production endpoints.
+
+## Re-running verification
 
 ```bash
 python3 -m apps.cli.gaia providers verify

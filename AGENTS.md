@@ -49,15 +49,16 @@ python3 -m apps.cli.gaia --database sqlite:///./local_data/gaia-alpha.sqlite3 de
 python3 scripts/bootstrap/validate_constitution.py     # constitution/lint check
 ```
 
-Baseline as of 2026-08-15: **470 tests, 0 failures, 9 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
+Baseline as of 2026-08-16: **475 tests, 0 failures, 9 opt-in skips** — fully green on Linux. Any failure you introduce is yours. Run the full suite before every commit; tests use in-memory SQLite (or pin provider modes) and never hit the network. File-backed databases default several providers to live, so a test that creates a file-backed runtime must pin `GAIA_ATLAS_GEOGRAPHY_MODE` (and any other live-defaulting mode) to an offline value — see `tests/phase13/test_protocol_three_runtime.py::setUp`.
 
 ## Provider modes — know what's real
 
-Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** Census geocoder, USGS NLDI watershed, NWS, NASA POWER, SSURGO, USGS Water, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
+Defaults are chosen in `apps/api/gaia_api/runtime.py` (`_fixture_defaults_for_runtime`): tests/`:memory:` DBs get all-fixture; a file-backed DB gets **live** Census geocoder, USGS WBD watershed, NWS, NASA POWER, SSURGO, USGS Water, GBIF, and Europe PMC. So the local alpha already makes real HTTP calls — CI does not.
 
-- **Genuinely live-capable today:** Atlas geography (US Census geocoder), Atlas watershed (USGS NLDI), NWS, NASA POWER, SSURGO soil, USGS Water, GBIF, Europe PMC — all free and keyless. Genesys (optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), NASS and AMS (real normalization; each needs its own free API key), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
+- **Genuinely live-capable today:** Atlas geography (US Census geocoder), Atlas watershed (USGS Watershed Boundary Dataset), NWS, NASA POWER, SSURGO soil, USGS Water, GBIF, Europe PMC — all free and keyless. Genesys (optional `GENESYS_CLIENT_ID`/`GENESYS_CLIENT_SECRET` OAuth; fails closed without them), NASS and AMS (real normalization; each needs its own free API key), Ollama text, Ollama LLaVA, Kew POWO (disabled pending terms review).
 - **Live mode exists but is empty or partial:** APHIS/FDACS (page-probe only, returns zero rules), Pl@ntNet and Google Calendar (`NotImplementedError`).
 - **No live path exists:** Texas Agriculture; Atlas hardiness and regulatory-geometry remain fixture/local.
+- **An identifier is not a name.** The watershed adapter used to answer with a COMID when the feature carried no name, which reads as a real answer and is not one. Ask the authority that actually names the thing (WBD for hydrologic units), and return UNRESOLVED when only a code is available. The same rule applies to any adapter with a name-then-code fallback.
 - **Offline geography never invents a county.** `CLIGeographyProvider` resolves only the exact seeded demo coordinates, and only in fixture mode; every other mode returns UNRESOLVED so the live Census geocoder is the sole real source. Do not reintroduce bounding boxes — they return a plausible county for any nearby point, which is a hardcoded answer wearing the costume of a geocode result.
 - Env vars are `GAIA_*`-prefixed in code (`GAIA_NASS_API_KEY`, not `USDA_NASS_API_KEY`; `.env.example` lists both — the `GAIA_*` ones win).
 
@@ -71,8 +72,8 @@ Full detail in `docs/architecture/code-audit-2026-08-15.md` (see its remediation
 
 - **Sentinel rules are hand-authored.** APHIS/FDACS "live" mode fetches and hashes the official pages for provenance but yields zero structured rules. Treat the fixture rule tables as the real decision source and keep the fail-closed posture.
 - **Knowledge retrieval is lexical, not vector-semantic.** FTS5/BM25 with stemming is real ranked retrieval (`search_knowledge_documents`), but it matches words, not meaning. `FixtureEmbeddingProvider` is still a checksum and is no longer on the retrieval path — do not treat it as an embedding model.
-- **No live path:** Atlas watershed/hardiness/regulatory-geometry.
-- **Unverified against real endpoints:** Census geocoder, NASS, AMS, SSURGO were built and tested structurally, but no successful live call has been recorded yet (sandbox egress + missing USDA keys).
+- **No live path:** Atlas hardiness and regulatory geometry.
+- **Unverified against real endpoints:** NASS and AMS, which need their own free API keys. Everything else keyless was verified live on 2026-08-16 (`checked 8, ok 8, failed 0`) — see `PROTOCOL_THREE_STATUS.md`. The watershed and NASA POWER adapters changed after that run and need one more `providers verify` pass.
 
 ## Resilience rules
 

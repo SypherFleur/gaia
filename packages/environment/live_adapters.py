@@ -89,14 +89,17 @@ class NASAPowerApiAdapter:
         self.timeout_seconds = timeout_seconds
 
     async def climate_context(self, latitude: float, longitude: float, at_time: str | None = None) -> EnvironmentalProviderResult:
-        power_date = _power_date(at_time)
+        # POWER publishes on a variable lag, so a single same-day request
+        # returns fill values and reads as "available but null". Ask for a
+        # window and use the most recent day the service actually published.
+        start_date, end_date = _power_window(at_time)
         params = {
             "parameters": "T2M,PRECTOTCORR,ALLSKY_SFC_SW_DWN",
             "community": "AG",
             "longitude": f"{longitude:.4f}",
             "latitude": f"{latitude:.4f}",
-            "start": power_date,
-            "end": power_date,
+            "start": start_date,
+            "end": end_date,
             "format": "JSON",
         }
         url = self.base_url + "?" + urllib.parse.urlencode(params)
@@ -109,10 +112,14 @@ class NASAPowerApiAdapter:
     def normalize_daily_response(self, payload: dict, canonical_url: str) -> EnvironmentalProviderResult:
         properties = payload.get("properties", {})
         parameters = properties.get("parameter", {})
+        temperature, temperature_date = _latest_value(parameters.get("T2M", {}))
+        precipitation, _ = _latest_value(parameters.get("PRECTOTCORR", {}))
+        radiation, _ = _latest_value(parameters.get("ALLSKY_SFC_SW_DWN", {}))
         data = {
-            "temperature_history": {"value": _first_value(parameters.get("T2M", {})), "unit": "C", "parameter": "T2M", "evidence_type": "MODELED"},
-            "precipitation_context": {"value": _first_value(parameters.get("PRECTOTCORR", {})), "unit": "mm/day", "parameter": "PRECTOTCORR", "evidence_type": "MODELED"},
-            "solar_radiation": {"value": _first_value(parameters.get("ALLSKY_SFC_SW_DWN", {})), "unit": "MJ/m^2/day", "parameter": "ALLSKY_SFC_SW_DWN", "evidence_type": "MODELED"},
+            "temperature_history": {"value": temperature, "unit": "C", "parameter": "T2M", "evidence_type": "MODELED"},
+            "precipitation_context": {"value": precipitation, "unit": "mm/day", "parameter": "PRECTOTCORR", "evidence_type": "MODELED"},
+            "solar_radiation": {"value": radiation, "unit": "MJ/m^2/day", "parameter": "ALLSKY_SFC_SW_DWN", "evidence_type": "MODELED"},
+            "observation_date": temperature_date,
             "temporal_resolution": "daily",
             "semantic_note": "NASA POWER is regional/model-derived environmental data, not an exact on-site sensor reading.",
         }
@@ -433,10 +440,19 @@ def _slope_range(row: dict) -> str | None:
     return f"{(low if low is not None else high):g}%"
 
 
-def _first_value(values: dict) -> float | None:
-    if not values:
-        return None
-    return _normalize_power_value(next(iter(values.values())))
+def _latest_value(values: dict) -> tuple[float | None, str | None]:
+    """Most recent published value in the window, with the day it belongs to.
+
+    POWER keys days as YYYYMMDD and fills unpublished days with a sentinel, so
+    the newest key is not necessarily the newest *answer*.
+    """
+    for key in sorted(values, reverse=True):
+        value = _normalize_power_value(values[key])
+        if value is not None:
+            day = str(key)
+            iso = f"{day[0:4]}-{day[4:6]}-{day[6:8]}" if len(day) == 8 and day.isdigit() else day
+            return value, iso
+    return None, None
 
 
 def _normalize_power_value(value) -> float | None:
@@ -455,9 +471,19 @@ def _normalize_power_value(value) -> float | None:
     return value
 
 
-def _power_date(at_time: str | None) -> str:
+# How far back to look for the most recent published day. POWER's lag varies,
+# so a window is robust where any single fixed offset is a guess.
+POWER_LOOKBACK_DAYS = 10
+
+
+def _power_window(at_time: str | None) -> tuple[str, str]:
+    end = datetime.now(timezone.utc)
     if at_time:
         normalized = at_time[:10].replace("-", "")
         if len(normalized) == 8 and normalized.isdigit():
-            return normalized
-    return (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y%m%d")
+            try:
+                end = datetime.strptime(normalized, "%Y%m%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+    start = end - timedelta(days=POWER_LOOKBACK_DAYS)
+    return start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
