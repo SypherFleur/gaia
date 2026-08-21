@@ -88,3 +88,56 @@ Full detail in `docs/architecture/code-audit-2026-08-15.md` (see its remediation
 - **Untrusted content stays untrusted.** Retrieved abstracts, fetched pages, model output, and user uploads never change system policy, tool selection, citations, or cost posture. Prompt-injection boundaries are tested; keep them.
 - **Real-data priority order** (all free-provider tiers done 2026-08-15): ~~Atlas geocoder~~ → ~~fix S1 bugs~~ → ~~Mercator NASS/AMS~~ → ~~SSURGO~~ → ~~USGS Water~~ → ~~institutional retrieval (FTS5)~~ → Sentinel rule ingestion (deliberately deferred; see below). Paid/credentialed providers (Pl@ntNet, Google Calendar, any paid model) require an explicit human decision first — propose, don't enable.
 - **Location privacy.** Exact private coordinates never leave the machine; providers receive reduced/centroid geography per `packages/geospatial/privacy.py`. Preserve this in any new adapter.
+
+## Working as one of several agents
+
+Tasks may be dispatched to several coding agents at once through
+`build-harness/` (a development tool that operates on this repo from outside;
+it is not part of GAIA and never ships). If you were given a task with a
+declared file scope, these rules bind you.
+
+- **Stay in your lane.** Modify only the paths your task declared. The
+  dispatcher runs `git diff --name-only` after you finish and rejects the task
+  if you touched anything else — including files you improved.
+- **These files are owned by a human, always:** `packages/tools/gateway.py`,
+  `packages/persistence/sqlite.py`, `apps/api/gaia_api/runtime.py`,
+  `pyproject.toml`, `AGENTS.md`, `CLAUDE.md`. They carry invariants for every
+  other agent's work. If your task genuinely needs one changed, stop and report
+  it instead of editing it.
+- **Never claim a migration number yourself.** Migrations are append-only and
+  numbered, so two agents finishing at once both write `NNNN_` and collide
+  silently until someone builds a fresh database. The dispatcher allocates the
+  number; use exactly the one you were given.
+- **Never hand-write a test fixture for a live adapter.** Capture the real
+  response, save it under `tests/fixtures/<provider_id>/` with its request URL
+  and capture date in the file, and test against that. A hand-written payload
+  tests your assumption about the service, not the service. This rule exists
+  because the watershed adapter shipped a name-then-code fallback whose unit
+  test asserted the bug as correct behaviour, and the WBD replacement shipped a
+  layer-selection rule whose test fed it a catalog invented to match.
+
+### Definition of done
+
+Green tests are evidence you broke nothing. They are not evidence your work
+works — the suite is deterministic and offline by design, so it structurally
+cannot detect a wrong assumption about a remote service. Every provider task
+must clear all four:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'    # 0 failures
+python3 scripts/bootstrap/validate_constitution.py
+python3 -m apps.cli.gaia providers verify               # your provider: OK, with a real sample
+GAIA_RUN_<X>_SMOKE=1 python3 -m unittest tests.phaseN.test_<x>   # if the task added a smoke
+```
+
+The dispatcher runs these itself and believes only its own exit codes. Your
+summary of them is not consulted.
+
+### PASS, FAIL, and UNVERIFIABLE
+
+A check that could not be run — no egress, missing key, absent tool — is
+**UNVERIFIABLE**, and that is a third outcome, not a soft pass. Say so in
+`unresolved` and stop; a task with an unverifiable check is handed to a human,
+not retried. Reporting an outcome you did not observe is the worst thing you
+can do here: it is the exact failure the gate exists to catch, and it costs
+more than failing honestly.

@@ -1,0 +1,3 @@
+# Pinned exactly: the SDK is pre-1.0 (0.1.x) and ships frequently, so an
+# unpinned install would silently change agent behaviour between runs.
+agentfield[harness-claude]==0.1.132

@@ -42,3 +42,6 @@ Thumbs.db
 .vscode/
 .idea/
 
+
+# Build harness is a dev tool, not part of GAIA; its venv never ships.
+build-harness/.venv/
